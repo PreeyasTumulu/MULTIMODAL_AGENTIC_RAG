@@ -162,6 +162,24 @@ Next.js frontend, performance tuning.
 
 ---
 
+## Documentation
+
+Full documentation lives in **[`docs/`](docs/)** and is maintained alongside the
+code — see [docs/README.md](docs/README.md) for the maintenance policy.
+
+| Document | Answers |
+|---|---|
+| [PRD](docs/product/prd.md) | What are we building, and what counts as done? |
+| [SRS](docs/product/srs.md) | Every requirement, with how it is verified |
+| [Architecture overview](docs/architecture/overview.md) | Components and how they fit |
+| **[Data flow](docs/architecture/data-flow.md)** | **Where every byte comes from, how it is processed, how it is used** |
+| [Storage](docs/architecture/storage.md) | Postgres vs Qdrant vs disk — and how vectors are stored |
+| [API spec](docs/architecture/api.md) | Endpoints, schemas, errors, streaming |
+| [Data sources](docs/data/sources.md) | Provenance, licensing, reliability |
+| [Database schema](docs/data/schema.md) | Generated from the models |
+| [Runbook](docs/operations/runbook.md) | How to run, rebuild and debug |
+| [Changelog](docs/CHANGELOG.md) | What changed, when |
+
 ## Decisions
 
 Architecture decision records live in [`docs/adr/`](docs/adr/).
