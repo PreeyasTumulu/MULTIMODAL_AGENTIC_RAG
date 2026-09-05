@@ -54,6 +54,8 @@ uv run jupyter nbconvert --to notebook --execute --inplace \
   --ExecutePreprocessor.timeout=3600 notebooks/07_index_chunks.ipynb
 ```
 
+**Currently carrying outputs:** 06 and 09. The rest still need one execution pass — see the Unreleased section of [`docs/CHANGELOG.md`](../docs/CHANGELOG.md).
+
 **Commit notebooks with their outputs.** The saved tables and numbers are the
 point — a notebook stripped of outputs makes a reader run a 30-minute pipeline
 just to see what happened.

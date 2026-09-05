@@ -5,10 +5,31 @@ Notable changes per development day. Format loosely follows
 
 ---
 
-## [Unreleased] — Day 4
+## [Unreleased]
 
-Planned: hybrid dense + sparse retrieval, cross-encoder reranking, and the
-measured improvement over the Day 3 baseline.
+### Day 3 is incomplete — read this before running anything
+
+> ⚠️ **The Qdrant collection `elements_bge-small` is PARTIAL** (~3,328 of 9,982
+> points). Indexing was interrupted. **Do not run notebook 08 against it** — it
+> would produce a baseline that looks real and is wrong.
+
+Pick up here:
+
+1. Re-run [`notebooks/07_index_chunks.ipynb`](../notebooks/07_index_chunks.ipynb).
+   It calls `recreate()`, so it drops and rebuilds. ~30 min; background it.
+2. Run [`notebooks/08_evaluate_retrieval.ipynb`](../notebooks/08_evaluate_retrieval.ipynb)
+   for the first real Recall@k / MRR baseline. Costs no LLM quota.
+3. Execute the remaining notebooks so they ship **with outputs**. Only 06 and 09
+   have them today.
+4. Write ADR-006 (embedding model): index `bge-base` as a second collection and
+   compare on the same 44 questions. Do not pick a model by reputation.
+5. Flip the ✅/🔜 markers in `docs/`, regenerate `data/schema.md` via notebook 10.
+
+### Then — Day 4
+
+Hybrid dense + sparse retrieval, cross-encoder reranking, and the measured
+improvement over the Day 3 baseline. The delta is the deliverable, not the
+technique.
 
 ---
 
