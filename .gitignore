@@ -1,0 +1,27 @@
+# ---- data: NEVER commit the corpus. It is reproducible from scripts + manifest.
+data/
+*.pdf
+*.parquet
+
+# ---- secrets
+.env
+.env.local
+*.pem
+
+# ---- python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

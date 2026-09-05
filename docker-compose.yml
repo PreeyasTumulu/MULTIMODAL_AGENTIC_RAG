@@ -1,0 +1,22 @@
+# Data plane only. The application runs on the host during development.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: agentic_rag_pg
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-analyst}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-analyst}
+      POSTGRES_DB: ${POSTGRES_DB:-analyst}
+    ports:
+      # Host 5433 -> container 5432. Host 5432 is already taken on this machine.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-analyst} -d ${POSTGRES_DB:-analyst}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

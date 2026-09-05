@@ -1,0 +1,51 @@
+# The corpus. One place to change scope.
+# yf_symbol drives BOTH the price series and the fundamentals oracle.
+companies:
+  - ticker: TCS
+    name: Tata Consultancy Services
+    sector: IT
+    yf_symbol: TCS.NS
+  - ticker: INFY
+    name: Infosys
+    sector: IT
+    yf_symbol: INFY.NS
+  - ticker: WIPRO
+    name: Wipro
+    sector: IT
+    yf_symbol: WIPRO.NS
+  - ticker: HDFCBANK
+    name: HDFC Bank
+    sector: Banking
+    yf_symbol: HDFCBANK.NS
+  - ticker: ICICIBANK
+    name: ICICI Bank
+    sector: Banking
+    yf_symbol: ICICIBANK.NS
+  - ticker: BAJFINANCE
+    name: Bajaj Finance
+    sector: Banking
+    yf_symbol: BAJFINANCE.NS
+  - ticker: RELIANCE
+    name: Reliance Industries
+    sector: Energy
+    yf_symbol: RELIANCE.NS
+  - ticker: NTPC
+    name: NTPC
+    sector: Energy
+    yf_symbol: NTPC.NS
+  - ticker: ONGC
+    name: Oil and Natural Gas Corporation
+    sector: Energy
+    yf_symbol: ONGC.NS
+  - ticker: SUNPHARMA
+    name: Sun Pharmaceutical Industries
+    sector: Pharma
+    yf_symbol: SUNPHARMA.NS
+  - ticker: DRREDDY
+    name: Dr. Reddy's Laboratories
+    sector: Pharma
+    yf_symbol: DRREDDY.NS
+  - ticker: CIPLA
+    name: Cipla
+    sector: Pharma
+    yf_symbol: CIPLA.NS
