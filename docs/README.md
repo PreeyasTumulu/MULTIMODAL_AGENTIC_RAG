@@ -43,14 +43,14 @@ If you find one, that is a bug.
 
 | File | Regenerate with |
 |---|---|
-| [`data/schema.md`](data/schema.md) | `uv run python scripts/gen_schema_docs.py` |
+| [`data/schema.md`](data/schema.md) | run [`notebooks/10_generate_docs.ipynb`](../notebooks/10_generate_docs.ipynb) |
 
 **Written docs — update when the matching thing changes:**
 
 | If you change… | Update… |
 |---|---|
-| a SQLAlchemy model | run the schema generator |
-| an acquisition or parsing script | [data-flow.md](architecture/data-flow.md) |
+| a SQLAlchemy model | run notebook 10 to regenerate `schema.md` |
+| an acquisition or parsing notebook | [data-flow.md](architecture/data-flow.md) |
 | a data source, URL or licence | [data/sources.md](data/sources.md) |
 | a component, or how components talk | [architecture/overview.md](architecture/overview.md) |
 | where something is stored | [architecture/storage.md](architecture/storage.md) |

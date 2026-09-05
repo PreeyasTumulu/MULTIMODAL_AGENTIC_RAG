@@ -18,7 +18,7 @@ So the benchmark measures **oracle recall**: of the financial facts we already
 know to be true for a company and fiscal year, what fraction can be located in
 the text the parser produced? It predicts directly how many benchmark questions
 Day 3 will be able to generate, and it costs zero LLM calls.
-See `scripts/benchmark_parsers.py`.
+See notebook `05_benchmark_parsers.ipynb`.
 
 ### Identical 60-page subsets, six real annual reports
 

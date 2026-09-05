@@ -16,13 +16,13 @@ flowchart TD
     end
 
     subgraph ACQ["1. ACQUISITION"]
-        AP["acquire_prices.py"]
-        AF["acquire_facts.py"]
-        DD["download_docs.py<br/>sha256-pinned"]
+        AP["nb 01 · prices"]
+        AF["nb 02 · facts"]
+        DD["nb 03 · documents<br/>sha256-pinned"]
     end
 
     subgraph PARSE["2. PARSING"]
-        PD["parse_documents.py<br/>PyMuPDF"]
+        PD["nb 04 · parse<br/>PyMuPDF"]
     end
 
     subgraph STORE["3. STORAGE"]
@@ -30,9 +30,9 @@ flowchart TD
         FS["data/raw · data/figures"]
     end
 
-    subgraph INDEX["4. INDEXING (Day 3)"]
+    subgraph INDEX["4. INDEXING (nb 07)"]
         CH["chunking"]
-        EM["BGE embeddings<br/>local GPU"]
+        EM["BGE embeddings<br/>fastembed / ONNX"]
         QD[("Qdrant<br/>vectors + element_id")]
     end
 
@@ -64,7 +64,7 @@ flowchart TD
 
 ## Stage 1 — Acquisition ✅
 
-### 1a. Prices — `scripts/acquire_prices.py`
+### 1a. Prices — notebook `01_acquire_prices.ipynb`
 
 ```
 configs/companies.yaml  →  yfinance .NS  →  drop_partial_bar()  →  prices
@@ -83,7 +83,7 @@ with Open/High/Low/Volume populated and **`Close` = NaN**. `df.iloc[-1]["Close"]
 is then NaN in production, and only sometimes. `drop_partial_bar()` removes any
 row without a close.
 
-### 1b. Financial facts — `scripts/acquire_facts.py`
+### 1b. Financial facts — notebook `02_acquire_facts.ipynb`
 
 ```
 yfinance income_stmt / balance_sheet / cashflow
@@ -105,7 +105,7 @@ yfinance income_stmt / balance_sheet / cashflow
 2. **NaN is dropped, not written as 0.** An absence of evidence is not a zero,
    and a fabricated zero would corrupt the oracle.
 
-### 1c. Documents — `scripts/download_docs.py`
+### 1c. Documents — notebook `03_download_documents.ipynb`
 
 ```
 configs/documents.yaml → HTTP GET → verify content-type → sha256 → data/raw/ + documents
@@ -129,11 +129,11 @@ Behaviour:
   prints the URL and target path; the checksum still guarantees reproducibility.
 
 **No PDF is ever committed to git.** `data/` is ignored; the manifest plus these
-scripts reconstruct the corpus byte-for-byte.
+notebooks reconstruct the corpus byte-for-byte.
 
 ---
 
-## Stage 2 — Parsing ✅ — `scripts/parse_documents.py`
+## Stage 2 — Parsing ✅ — notebook `04_parse_documents.ipynb`
 
 ```
 PDF → PyMuPDF → tables (claim regions) → text blocks (skip claimed) → figures → elements
@@ -225,7 +225,7 @@ facts.value = 520,412,500,000          (₹52,041 cr, absolute rupees)
 Whitespace is stripped from both sides because PDF extraction routinely splits a
 figure — `9,64, 693` — including with non-breaking and thin spaces.
 
-**Verified against real documents** (`scripts/demo_oracle_link.py`):
+**Verified against real documents** (notebook `09_explore_corpus.ipynb`):
 
 | Fact | Oracle | Found as | Page | Report's scale |
 |---|---|---|---:|---|

@@ -82,6 +82,55 @@ def normalise(text: str) -> str:
     return _WS.sub("", text)
 
 
+# A printed figure and the vendor's figure rarely agree to the last rupee. HDFC
+# Bank's FY2025 net profit is Rs 67,347.36 crore in the filing and Rs 67,351
+# crore at the vendor - a 0.006% difference that defeats exact string matching
+# entirely. So we also match numerically, within a tolerance.
+DEFAULT_TOLERANCE = Decimal("0.005")  # 0.5%
+_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def parse_printed(token: str) -> Decimal | None:
+    """"9,64,693.50" or "964,693.50" -> Decimal. Grouping style is irrelevant."""
+    digits = token.replace(",", "")
+    if not digits or digits.count(".") > 1:
+        return None
+    significant = digits.replace(".", "").lstrip("0")
+    if len(significant) < MIN_DIGITS:
+        return None
+    try:
+        return Decimal(digits)
+    except ArithmeticError:
+        return None
+
+
+def find_value_tolerant(
+    value: Decimal, text: str, tolerance: Decimal = DEFAULT_TOLERANCE
+) -> tuple[str, Decimal] | None:
+    """Best numeric match for `value` in `text`, across every scale.
+
+    Returns (printed token, relative error) for the CLOSEST match, or None.
+    Closest rather than first: inside a financial statement several figures may
+    fall inside the tolerance band, and the nearest is the one that is actually
+    the same fact.
+    """
+    target = abs(value)
+    if target == 0:
+        return None
+
+    best: tuple[str, Decimal] | None = None
+    for match in _NUMBER.finditer(text):
+        token = match.group(0).rstrip(",")
+        parsed = parse_printed(token)
+        if parsed is None or parsed == 0:
+            continue
+        for scale in SCALES.values():
+            error = abs(parsed * scale - target) / target
+            if error <= tolerance and (best is None or error < best[1]):
+                best = (token, error)
+    return best
+
+
 def find_value(value: Decimal, text: str) -> str | None:
     """Return the matched printed form, or None.
 

@@ -2,7 +2,7 @@
 
 How to run, rebuild, migrate and debug this system.
 
-**Status:** ✅ current as of Day 2
+**Status:** ✅ current as of Day 3
 
 ---
 
@@ -34,14 +34,18 @@ uv run alembic upgrade head
 Then load the corpus, in this order (later steps depend on earlier ones):
 
 ```bash
-uv run python scripts/acquire_prices.py     # ~15 s  -> companies + prices
-uv run python scripts/acquire_facts.py      # ~30 s  -> facts (the oracle)
-uv run python scripts/download_docs.py      # ~2 min -> data/raw + documents
-uv run python scripts/parse_documents.py    # ~5 min -> elements + data/figures
-uv run python scripts/db_stats.py           # verify
+uv run jupyter lab
 ```
 
-`download_docs.py` will print two documents it cannot fetch — see
+Then run `notebooks/01` through `08` in order.
+[`notebooks/README.md`](../../notebooks/README.md) lists what each does and how
+long it takes. Headless, saving outputs into the file:
+
+```bash
+uv run jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=5400 notebooks/07_index_chunks.ipynb
+```
+
+Notebook 03 prints two documents it cannot fetch — see
 [Manual downloads](#manual-downloads).
 
 ---
@@ -54,10 +58,13 @@ uv run python scripts/db_stats.py           # verify
 | Lint | `uv run ruff check .` |
 | Auto-fix lint | `uv run ruff check . --fix` |
 | Type check | `uv run mypy` |
-| Corpus status | `uv run python scripts/db_stats.py` |
-| Prove the oracle join | `uv run python scripts/demo_oracle_link.py SUNPHARMA 2025` |
-| Benchmark parsers | `uv run python scripts/benchmark_parsers.py` |
-| Regenerate schema docs | `uv run python scripts/gen_schema_docs.py` |
+| Launch notebooks | `uv run jupyter lab` |
+| Corpus status / oracle join | notebook `09_explore_corpus.ipynb` |
+| Benchmark parsers | notebook `05_benchmark_parsers.ipynb` |
+| Rebuild the eval benchmark | notebook `06_build_benchmark.ipynb` |
+| Index chunks into Qdrant | notebook `07_index_chunks.ipynb` |
+| Measure retrieval | notebook `08_evaluate_retrieval.ipynb` |
+| Regenerate schema docs | notebook `10_generate_docs.ipynb` |
 | Add a dependency | `uv add <package>` |
 
 **Before every commit:** `uv run pytest && uv run ruff check . && uv run mypy`
@@ -113,9 +120,9 @@ Everything except the manifest is derived state.
 
 | Lost | Recover with |
 |---|---|
-| Whole database | `docker compose up -d && uv run alembic upgrade head`, then re-run the four acquisition scripts |
-| `data/raw/` | `uv run python scripts/download_docs.py` — checksums verify integrity |
-| `data/figures/` | `uv run python scripts/parse_documents.py` |
+| Whole database | `docker compose up -d && uv run alembic upgrade head`, then re-run notebooks 01-04 |
+| `data/raw/` | run notebook `03_download_documents.ipynb` — checksums verify integrity |
+| `data/figures/` | run notebook `04_parse_documents.ipynb` |
 | `elements` | Same — element IDs are deterministic, so any index stays valid |
 
 Full-reset:
@@ -125,7 +132,7 @@ docker compose down -v
 rm -rf data/
 docker compose up -d
 uv run alembic upgrade head
-# then the four acquisition scripts
+# then notebooks 01-04
 ```
 
 ---
@@ -141,8 +148,7 @@ once in a browser:
 | TCS | `https://www.tcs.com/content/dam/tcs/investor-relations/financial-statements/2024-25/ar/annual-report-2024-2025.pdf` | `data\raw\TCS\TCS_annual_report_FY2025.pdf` |
 | INFY | `https://www.infosys.com/investors/reports-filings/annual-report/annual/documents/infosys-ar-25.pdf` | `data\raw\INFY\INFY_annual_report_FY2025.pdf` |
 
-Then `uv run python scripts/download_docs.py` pins their checksums, and
-`parse_documents.py` picks them up.
+Then re-run notebook 03 to pin their checksums; notebook 04 picks them up.
 
 ---
 
@@ -190,6 +196,37 @@ SELECT DISTINCT ON (ticker) ticker, trade_date, close
 FROM prices ORDER BY ticker, trade_date DESC;
 ```
 
+### Embedding is far slower than expected
+
+Two causes, both measured on this machine:
+
+- **onnxruntime intra-op threads do not help.** `threads=16` measured 4.1
+  chunks/sec against 4.4 at the default. Use `parallel=8` instead (process-level
+  data parallelism), which measured 8.7 chunks/sec.
+- **Long table chunks dominate the cost.** Attention is quadratic in sequence
+  length, and dense numeric text tokenizes about 60% worse than prose. A
+  1,230-character table chunk embedded at 2.1/sec against 9.0/sec for
+  585-character prose. `MAX_TABLE_CHARS` caps this.
+
+### A table's content seems to be missing from retrieval
+
+It was probably truncated at the encoder's 512-token limit before it was ever
+embedded. Check the longest chunks:
+
+```sql
+SELECT element_id, length(text) FROM elements
+WHERE type = 'table' ORDER BY length(text) DESC LIMIT 5;
+```
+
+Anything beyond the encoder budget is not extra context - it is content the
+retriever cannot see.
+
+### `UnicodeEncodeError: 'charmap' codec can't encode character`
+
+The Windows console is cp1252. Keep script output ASCII-only; a bare arrow or
+rupee sign raises **after** any file has already been written, which reads like
+a generation failure but is only a print failure.
+
 ### `import fitz` deprecation warning
 
 Use `import pymupdf`. `fitz` is the legacy alias.
@@ -213,7 +250,8 @@ inlining the change in a shell command.
 |---|---|---|
 | 5432 | *(another local Postgres)* | Not ours — avoided |
 | **5433** | Project Postgres | |
-| 6333 | Qdrant | Day 3 |
+| **6333** | Qdrant REST + dashboard at `/dashboard` | |
+| 6334 | Qdrant gRPC | |
 | 8000 | FastAPI | Day 6 |
 | 8501 | Streamlit | Day 6 |
 | 11434 | Ollama | Native Windows install |

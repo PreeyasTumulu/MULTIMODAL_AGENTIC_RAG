@@ -72,11 +72,15 @@ git clone https://github.com/PreeyasTumulu/MULTIMODAL_AGENTIC_RAG.git
 cd MULTIMODAL_AGENTIC_RAG
 cp .env.example .env
 uv sync
-docker compose up -d
+docker compose up -d          # Postgres :5433, Qdrant :6333
 uv run alembic upgrade head
-uv run python scripts/acquire_prices.py
-uv run python scripts/acquire_facts.py
+uv run jupyter lab            # then run notebooks/01 .. 08 in order
 ```
+
+The pipeline is a numbered set of notebooks — see
+**[`notebooks/README.md`](notebooks/README.md)**. All reusable logic lives in
+`src/analyst/`, which is unit-tested and `mypy --strict` clean; the notebooks
+orchestrate it and show the results.
 
 Postgres binds host port **5433** (not 5432) to avoid colliding with an existing
 local Postgres.
@@ -84,9 +88,9 @@ local Postgres.
 ### Checks
 
 ```bash
-uv run pytest
-uv run ruff check .
-uv run mypy
+uv run pytest          # 37 tests
+uv run ruff check .    # covers notebooks too
+uv run mypy            # strict, over src/ and tests/
 ```
 
 ---
@@ -99,10 +103,10 @@ Built so far — the structured half of the corpus:
 configs/companies.yaml                    configs/documents.yaml
         |                                          |
         v                                          v
-  acquire_prices.py --> prices              download_docs.py  (sha256-pinned)
-  acquire_facts.py  --> facts  <-- ORACLE          |
+  nb 01 -> prices                           nb 03  (sha256-pinned)
+  nb 02 -> facts  <-- ORACLE                       |
         |                                          v
-        |                                   parse_documents.py
+        |                                    nb 04  parse
         |                                          |
         |                            +-------------+-------------+
         |                            v             v             v
@@ -151,7 +155,7 @@ Target, by Day 7:
 |---|---|---|
 | 1 | Scaffold, migrations, corpus, prices, financial oracle | done |
 | 2 | Parser benchmark, typed element store, table extraction | done |
-| 3 | Chunking, embeddings, Qdrant, **auto-generated benchmark**, baseline metrics | not started |
+| 3 | Chunking, embeddings, Qdrant, **auto-generated benchmark**, baseline metrics | in progress |
 | 4 | Hybrid retrieval, reranking, measured improvement over baseline | not started |
 | 5 | SQL agent (read-only, validated), calculator, price tool, vision agent | not started |
 | 6 | LangGraph orchestration, verifier, FastAPI, Streamlit | not started |
@@ -190,6 +194,7 @@ Architecture decision records live in [`docs/adr/`](docs/adr/).
 | [002](docs/adr/0002-llm-provider-stack.md) | Groq primary, Ollama local, OpenRouter benchmark — at ₹0 |
 | [003](docs/adr/0003-provenance-schema.md) | Provenance attached at extraction time |
 | [004](docs/adr/0004-pdf-parser.md) | PyMuPDF over pdfplumber — 30-60x faster, same oracle recall |
+| [005](docs/adr/0005-vector-store.md) | Qdrant over pgvector — hybrid retrieval is the deciding factor |
 
 ---
 

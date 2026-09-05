@@ -17,6 +17,8 @@ dependencies = [
     "tenacity>=9.0",
     "pymupdf>=1.28.2",
     "pdfplumber>=0.11.10",
+    "qdrant-client>=1.12",
+    "fastembed>=0.5",
 ]
 
 [dependency-groups]
@@ -27,6 +29,10 @@ dev = [
     "mypy>=1.13",
     "types-pyyaml",
     "pandas-stubs",
+    "nbformat>=5.11.1",
+    "nbconvert>=7.17.1",
+    "ipykernel>=7.3.0",
+    "jupyterlab>=4.6.3",
 ]
 
 [build-system]
@@ -39,7 +45,7 @@ packages = ["src/analyst"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "scripts", "tests"]
+src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN"]
@@ -47,14 +53,16 @@ ignore = ["ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*" = ["E501", "I001"]  # generated code
-"scripts/*" = ["T201"]
+# Notebooks import per-cell by design, so file-level import rules do not apply.
+# Everything else - unused names, bugs, line length - is still enforced.
+"notebooks/*.ipynb" = ["E402", "I001", "ANN"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 warn_return_any = true
 ignore_missing_imports = true
-files = ["src", "scripts", "tests"]
+files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -64,5 +72,5 @@ addopts = "-q --strict-markers"
 # the rule for the two modules that touch it keeps strict mode everywhere else
 # rather than weakening the whole project.
 [[tool.mypy.overrides]]
-module = ["analyst.parsing", "benchmark_parsers"]
+module = ["analyst.parsing"]
 disallow_untyped_calls = false

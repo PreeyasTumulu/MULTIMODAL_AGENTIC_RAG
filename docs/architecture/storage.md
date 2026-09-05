@@ -2,7 +2,7 @@
 
 What lives where, and why this is not one database.
 
-**Status:** ✅ Postgres + filesystem built · 🔜 Qdrant designed (Day 3)
+**Status:** ✅ Postgres, filesystem and Qdrant built
 
 ---
 
@@ -11,7 +11,7 @@ What lives where, and why this is not one database.
 | Store | Holds | Owns | Size today |
 |---|---|---|---|
 | **PostgreSQL 17** | companies, prices, facts, documents, elements | **Truth** — exact values, joins, filters | 5 tables, ~70k rows |
-| **Qdrant** 🔜 | chunk vectors + payload | **Findability** — approximate semantic search | — |
+| **Qdrant 1.12** | chunk vectors + payload | **Findability** — approximate semantic search | 9,982 points |
 | **`data/raw/`** | 6 source PDFs | Reproducible input | ~68 MB |
 | **`data/figures/`** | 418 extracted images | Vision Agent input | ~40 MB |
 
@@ -43,11 +43,11 @@ The filesystem holds PDFs and images because binaries do not belong in a
 relational database or in git; the manifest checksum gives reproducibility
 without vendoring 68 MB into the repo.
 
-🧭 **Open — Qdrant vs pgvector.** pgvector would mean one fewer container and
-transactional consistency between vectors and elements. Qdrant is planned for
-native **sparse-vector support and RRF fusion**, which makes hybrid retrieval
-(Day 4) substantially simpler. That will be settled in an ADR on Day 3 with a
-measurement, not an opinion.
+**Decided: Qdrant** — see [ADR-005](../adr/0005-vector-store.md). pgvector was
+close, and would be the better choice if hybrid retrieval were not required: one
+fewer container, and transactional consistency between vectors and elements.
+Qdrant wins on Day 4's requirement — native sparse vectors alongside dense ones
+in the same collection, with server-side RRF fusion in a single query.
 
 ---
 
@@ -75,16 +75,16 @@ Host port **5433**, not 5432, to avoid colliding with an existing local Postgres
 
 ---
 
-## Qdrant — how vectors will be stored 🔜
+## Qdrant — how vectors are stored ✅
 
 ### Collection
 
 | Property | Value | Why |
 |---|---|---|
-| Name | `elements` | one collection, filtered by payload |
+| Name | `elements_<model-key>` | one collection per embedding model, so models can be compared on the same benchmark |
 | Distance | **Cosine** | BGE embeddings are trained for cosine; magnitude carries no meaning |
-| Dense vector | `bge-*` output, 768-dim (model TBD Day 3) | fits 4 GB VRAM locally |
-| Sparse vector 🔜 | lexical term weights | exact-term matching for tickers, years, line-item names |
+| Dense vector | `bge-small-en-v1.5`, **384-dim** | 70 MB, runs on CPU via ONNX — the deployment target has no GPU |
+| Sparse vector 🔜 (Day 4) | lexical term weights | exact-term matching for tickers, years, line-item names |
 | ID | UUIDv5 derived from `chunk_id` | deterministic — re-indexing overwrites rather than duplicating |
 
 ### Payload — what travels with every vector
@@ -109,14 +109,14 @@ search can be **filtered before it is scored**. If a question names a company an
 a year, there is no reason to search 46,000 elements when a few thousand qualify —
 that is both faster and more accurate than filtering afterwards.
 
-### Chunking rules 🔜
+### Chunking rules ✅
 
 | Element type | Rule | Reason |
 |---|---|---|
-| `table` | **Never split.** One chunk per table. | A table cut in half loses its header and becomes unreadable to both the model and the reranker. |
-| `text` | Group under the preceding `heading`, then split with overlap | A paragraph without its section title is ambiguous — "revenue grew 12%" for *which* segment? |
+| `table` | Split only when it must be, and **every slice repeats the header**. Packed to a 900-character budget. | A slice without its header is just digits. The budget is not cosmetic: before it existed the largest table chunk was 6,643 characters against an encoder limit of 512 tokens, so most of it was silently truncated and never embedded. |
+| `text` | Group under the preceding `heading` (~1,200 chars, 200 overlap) | A paragraph without its section title is ambiguous — "revenue grew 12%" for *which* segment? |
 | `heading` | Not indexed alone; prepended to its children | A heading is context, not an answer. |
-| `figure` | Indexed once the Vision Agent writes a description (Day 5) | Until then it is stored, not understood. |
+| `figure` | Skipped until the Vision Agent writes a description (Day 5) | Until then it is stored, not understood. |
 
 ### What Qdrant deliberately does not hold
 
@@ -124,8 +124,21 @@ that is both faster and more accurate than filtering afterwards.
 - No PDF bytes and no images — those are on disk, referenced by path.
 - No user data.
 
-**Rebuild cost if the collection is lost:** re-embed 46,241 elements locally.
-Minutes on the GPU, and zero data loss.
+**Rebuild cost if the collection is lost:** re-embed 9,982 chunks locally —
+about 30 minutes on this CPU, and zero data loss.
+
+### Embedding throughput, measured
+
+| Configuration | chunks/sec |
+|---|---:|
+| default | 4.4 |
+| `threads=16` (onnxruntime intra-op) | 4.1 |
+| **`parallel=8`** (process-level) | **8.7** |
+
+Intra-op threading does nothing — a single instance already saturates what it
+can use. The model is small enough that more *copies* beat more threads per copy.
+Defaulted to `parallel=4`: a `parallel=8` run died partway through a full index
+on a machine with ~2 GB free RAM, and each worker loads its own copy of the model.
 
 ---
 
@@ -156,9 +169,9 @@ path. `data/raw/` does **not** need to ship — the manifest rebuilds it.
 | Loss | Recovery | Data lost |
 |---|---|---|
 | Qdrant collection | re-run indexing from `elements` | none |
-| `data/raw/` | `uv run python scripts/download_docs.py` | none — checksums verify |
-| `data/figures/` | `uv run python scripts/parse_documents.py` | none |
-| `prices` / `facts` | re-run the acquisition scripts | none (vendor data may have been revised) |
+| `data/raw/` | run notebook `03_download_documents.ipynb` | none — checksums verify |
+| `data/figures/` | run notebook `04_parse_documents.ipynb` | none |
+| `prices` / `facts` | re-run notebooks `01` and `02` | none (vendor data may have been revised) |
 | `elements` | re-parse; element IDs are deterministic | none |
 | **`documents` + pinned checksums** | **from git** | — |
 

@@ -4,7 +4,7 @@ Hand-written schema documentation is wrong within a week. This reads the actual
 model definitions (and, if the database is reachable, live row counts) and
 regenerates the reference, so the doc cannot drift from the code.
 
-    uv run python scripts/gen_schema_docs.py
+Called from notebooks/10_generate_docs.ipynb, and from CI on Day 7.
 """
 
 from datetime import UTC, datetime
@@ -100,7 +100,7 @@ def row_counts(tables: list[Table]) -> dict[str, int | None]:
     return counts
 
 
-def main() -> None:
+def generate(out: Path = OUT) -> Path:
     order = ["companies", "documents", "elements", "facts", "prices"]
     tables = sorted(
         Base.metadata.tables.values(),
@@ -109,11 +109,11 @@ def main() -> None:
     counts = row_counts(tables)
     stamp = datetime.now(UTC).strftime("%Y-%m-%d")
 
-    out: list[str] = [
+    lines: list[str] = [
         "# Database schema",
         "",
         "> **Generated file — do not edit by hand.**",
-        "> Regenerate with `uv run python scripts/gen_schema_docs.py`.",
+        "> Regenerate by running `notebooks/10_generate_docs.ipynb`.",
         f"> Last generated: {stamp}",
         "",
         "PostgreSQL 17, reached on host port **5433**. Schema changes are applied "
@@ -130,8 +130,8 @@ def main() -> None:
     for t in tables:
         n = counts.get(t.name)
         rows = f"{n:,} rows" if n is not None else "not connected"
-        out += [f"## `{t.name}`", "", f"*{PURPOSE.get(t.name, '')}*  — currently **{rows}**", ""]
-        out += ["| Column | Type | Null | Key | Default |", "|---|---|---|---|---|"]
+        lines += [f"## `{t.name}`", "", f"*{PURPOSE.get(t.name, '')}*  — currently **{rows}**", ""]
+        lines += ["| Column | Type | Null | Key | Default |", "|---|---|---|---|---|"]
         for c in t.columns:
             key = "PK" if c.primary_key else ""
             if c.foreign_keys:
@@ -145,35 +145,32 @@ def main() -> None:
                 default = f"`{arg}`" if arg is not None else "server-generated"
             elif c.autoincrement is True and c.primary_key:
                 default = "auto"
-            out.append(
+            lines.append(
                 f"| `{c.name}` | {col_type(c)} | {'yes' if c.nullable else 'no'} "
                 f"| {key} | {default} |"
             )
-        out.append("")
+        lines.append("")
 
         # isinstance, not a name check: only UniqueConstraint declares .columns,
         # and mypy needs the narrowing to prove it.
         uniques = [k for k in t.constraints if isinstance(k, UniqueConstraint)]
         if uniques or t.indexes:
-            out += ["**Constraints and indexes**", ""]
+            lines += ["**Constraints and indexes**", ""]
             for uq in uniques:
                 cols = ", ".join(f"`{col.name}`" for col in uq.columns)
-                out.append(f"- `UNIQUE {uq.name}` on {cols}")
+                lines.append(f"- `UNIQUE {uq.name}` on {cols}")
             for ix in sorted(t.indexes, key=lambda i: i.name or ""):
                 cols = ", ".join(f"`{col.name}`" for col in ix.columns)
-                out.append(f"- `INDEX {ix.name}` on {cols}")
-            out.append("")
+                lines.append(f"- `INDEX {ix.name}` on {cols}")
+            lines.append("")
 
         if t.name in NOTES:
-            out += ["**Notes**", ""]
-            out += [f"- {n}" for n in NOTES[t.name]]
-            out.append("")
-        out += ["---", ""]
+            lines += ["**Notes**", ""]
+            lines += [f"- {n}" for n in NOTES[t.name]]
+            lines.append("")
+        lines += ["---", ""]
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text("\n".join(out), encoding="utf-8")
-    print(f"wrote {OUT} ({len(tables)} tables)")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines), encoding="utf-8")
+    return out
 
-
-if __name__ == "__main__":
-    main()

@@ -25,7 +25,11 @@ class Settings(BaseSettings):
     postgres_password: SecretStr = SecretStr("analyst")
     postgres_db: str = "analyst"
 
-    # --- llm providers (wired on Day 3)
+    # --- vector store
+    qdrant_url: str = "http://localhost:6333"
+    collection_prefix: str = "elements"
+
+    # --- llm providers (wired on Day 5)
     groq_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
     ollama_base_url: str = "http://localhost:11434"

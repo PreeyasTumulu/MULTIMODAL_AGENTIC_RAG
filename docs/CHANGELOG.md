@@ -5,10 +5,66 @@ Notable changes per development day. Format loosely follows
 
 ---
 
-## [Unreleased] — Day 3
+## [Unreleased] — Day 4
 
-Planned: chunking, BGE embeddings, Qdrant, the auto-generated benchmark, and
-first baseline retrieval metrics.
+Planned: hybrid dense + sparse retrieval, cross-encoder reranking, and the
+measured improvement over the Day 3 baseline.
+
+---
+
+## Day 3 — 2026-09-05
+
+### Changed — `scripts/` became `notebooks/`
+
+Every pipeline entry point is now a numbered notebook under `notebooks/`, so the
+pipeline **shows its output** instead of requiring a 30-minute run to see what
+happened. Earlier entries in this file name `scripts/*.py` files that no longer
+exist; the equivalents are listed in
+[`notebooks/README.md`](../notebooks/README.md).
+
+The split that makes this work:
+
+- `src/analyst/*.py` keeps **all** reusable logic — importable, 37 unit tests,
+  `mypy --strict` clean. A notebook cannot be imported, typed or tested.
+- `notebooks/*.ipynb` orchestrate and display. Deliberately thin.
+- `ruff` lints notebooks too; only file-level import rules (`E402`, `I001`) are
+  relaxed there, because notebooks import per cell by design.
+- `gen_schema_docs.py` moved into the library as `analyst.schema_docs.generate`,
+  so a notebook and CI call the same code.
+
+### Added
+
+- `src/analyst/chunking.py` — heading-aware text chunks; tables never separated
+  from their header.
+- `src/analyst/embedding.py` — fastembed (ONNX, no torch). Query and document
+  embeddings use different prefixes, which BGE requires.
+- `src/analyst/vectorstore.py` — Qdrant wrapper. Deterministic UUIDv5 point IDs,
+  payload-indexed on `ticker` / `fiscal_year` / `type` / `document_id`.
+- `src/analyst/benchmark.py` — the auto-generated evaluation set.
+- Qdrant added to `docker-compose.yml` (`:6333`).
+- [ADR-005](adr/0005-vector-store.md) — Qdrant over pgvector.
+
+### Fixed — two real defects found by measuring
+
+- **Table chunks were being silently truncated.** The largest was 6,643
+  characters against an encoder limit of 512 tokens, so most of the biggest
+  tables was never embedded at all. Table rows are now packed to a character
+  budget; p90 table chunk fell from 1,452 to 891 characters.
+- **The benchmark's false-positive problem, fixed.** ADR-004 recorded raw oracle
+  recall of 47–57% as a *ceiling*, not a score. A value is now accepted only when
+  a label for its concept appears in the **same element**, plus a tolerant
+  numeric pass within 0.5% — because the vendor and the filing rarely agree to
+  the last rupee (HDFC Bank FY2025 net profit: ₹67,347.36 crore filed against
+  ₹67,351 crore at the vendor). Tolerance took HDFCBANK from 0 anchored
+  questions to 2, and the benchmark from 34 to 44.
+
+### Measured
+
+- **9,982 chunks** from 46,241 elements (2,751 table, 7,231 text).
+- Embedding throughput: onnxruntime intra-op `threads=16` made things *worse*
+  (4.1/sec against 4.4 default); process-level `parallel=8` doubled it to
+  8.7/sec. Defaulted to `parallel=4` after a `parallel=8` run died partway
+  through on a machine with ~2 GB free RAM.
 
 ---
 

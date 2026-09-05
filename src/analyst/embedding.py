@@ -1,0 +1,72 @@
+"""Text embeddings via fastembed (ONNX).
+
+Why fastembed rather than sentence-transformers: it runs on onnxruntime and
+needs no torch. The torch wheel is ~2.5 GB and would buy nothing here, because
+the models we can actually fit are 70-210 MB and run fine on CPU. It also
+supplies the cross-encoder reranker needed on Day 4, so one dependency covers
+both.
+
+**Queries and documents are embedded differently.** BGE models are trained with
+an instruction prefix on the query side only; embedding a question the same way
+as a passage measurably degrades retrieval. fastembed's `query_embed` applies
+the right prefix, so the asymmetry is handled here rather than forgotten at the
+call site.
+"""
+
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+
+import numpy as np
+from fastembed import TextEmbedding
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    key: str
+    name: str
+    dim: int
+    size_gb: float
+
+
+# Deliberately all small: the deployment target has no GPU, and a model that
+# cannot run there is not a candidate however good its benchmark scores are.
+MODELS: dict[str, ModelSpec] = {
+    "bge-small": ModelSpec("bge-small", "BAAI/bge-small-en-v1.5", 384, 0.07),
+    "bge-base": ModelSpec("bge-base", "BAAI/bge-base-en-v1.5", 768, 0.21),
+    "arctic-s": ModelSpec("arctic-s", "snowflake/snowflake-arctic-embed-s", 384, 0.13),
+    "minilm": ModelSpec("minilm", "sentence-transformers/all-MiniLM-L6-v2", 384, 0.09),
+}
+
+DEFAULT_MODEL = "bge-small"
+
+
+class Embedder:
+    def __init__(self, key: str = DEFAULT_MODEL) -> None:
+        if key not in MODELS:
+            raise KeyError(f"unknown embedding model {key!r}; have {sorted(MODELS)}")
+        self.spec = MODELS[key]
+        self._model = TextEmbedding(model_name=self.spec.name)
+
+    @property
+    def dim(self) -> int:
+        return self.spec.dim
+
+    def embed_documents(
+        self, texts: Iterable[str], batch_size: int = 64, parallel: int = 4
+    ) -> Iterator[np.ndarray]:
+        """`parallel` is process-level data parallelism, and it is what matters.
+
+        Measured on this 16-thread machine: onnxruntime intra-op threads made no
+        difference (4.4 -> 4.1 chunks/sec), while parallel=8 doubled throughput
+        (4.4 -> 8.7). The model is small enough that one instance cannot saturate
+        the CPU, so more copies beat more threads per copy.
+
+        Defaulted to 4 rather than 8: each worker loads its own copy of the model,
+        and a run at parallel=8 died partway through a 9,982-chunk index on a
+        machine with ~2 GB free RAM. Slightly slower and it finishes.
+        """
+        yield from self._model.embed(texts, batch_size=batch_size, parallel=parallel)
+
+    def embed_query(self, text: str) -> np.ndarray:
+        """Single query vector, with the model's query-side instruction prefix."""
+        return next(iter(self._model.query_embed([text])))
