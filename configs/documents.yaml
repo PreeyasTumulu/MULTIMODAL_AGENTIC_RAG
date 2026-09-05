@@ -1,0 +1,86 @@
+# Document manifest - the unstructured half of the corpus.
+#
+# The PDFs themselves are NEVER committed. This file plus scripts/download_docs.py
+# reconstructs the corpus, and sha256 makes that reconstruction verifiable rather
+# than merely hopeful.
+#
+# fetch:
+#   auto   - scripted download works
+#   manual - the IR site blocks automated requests (Akamai/Cloudflare). Download
+#            once in a browser, drop it at the printed path, and the checksum
+#            still guarantees everyone has the same bytes.
+#
+# fiscal_year is the year the FY ENDS (Indian FY 2024-25 -> 2025), matching
+# facts.period_end so documents join to the oracle without a mapping table.
+
+documents:
+  # ---------- Energy ----------
+  - ticker: RELIANCE
+    doc_type: annual_report
+    fiscal_year: 2025
+    title: Integrated Annual Report 2024-25
+    url: https://www.ril.com/reports/RIL-Integrated-Annual-Report-2024-25.pdf
+    fetch: auto
+    sha256: bb541a68a0440fd4e27527afbb79f9a0e7584ae430fe9af244700709cacc0769
+
+  # ---------- Pharma ----------
+  - ticker: SUNPHARMA
+    doc_type: annual_report
+    fiscal_year: 2025
+    title: Annual Report 2024-25
+    url: https://sunpharma.com/wp-content/uploads/2025/07/SPIL-Annual-Report-2024-25.pdf
+    fetch: auto
+    sha256: 7cf1d4f4697c0d5fcade96cb612e1783bf886b585a6aff97efed59ab625a3eeb
+
+  - ticker: SUNPHARMA
+    doc_type: annual_report
+    fiscal_year: 2024
+    title: Annual Report 2023-24
+    url: https://sunpharma.com/wp-content/uploads/2024/07/SPIL-Annual-Report-2023-24.pdf
+    fetch: auto
+    sha256: cca3bdde342aa160a874bc3d711365d116c4d73612afd35472558cae3433a0d6
+
+  # ---------- Banking ----------
+  - ticker: HDFCBANK
+    doc_type: annual_report
+    fiscal_year: 2025
+    title: Integrated Annual Report 2024-25
+    url: https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/pdf/annual-reports/2024-25/HDFC_Bank_Annual_Report_2024_25-310202.pdf
+    fetch: auto
+    sha256: 2a1879eee544526b7cecacb5380c2664f92e0d031361f5d54ffe55370c9487ea
+
+  - ticker: ICICIBANK
+    doc_type: annual_report
+    fiscal_year: 2025
+    title: Annual Report 2024-25
+    url: https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2025/icici-bank-ar-2025.pdf
+    fetch: auto
+    sha256: 5694093de1bf733f104c46db909ad8a8828af97dab9a1da201e844235ae043ec
+
+  - ticker: ICICIBANK
+    doc_type: annual_report
+    fiscal_year: 2024
+    title: Annual Report 2023-24
+    url: https://www.icicibank.com/content/dam/icicibank/managed-assets/docs/investor/annual-reports/2024/annual-report-of-icici-bank-2023-24.pdf
+    fetch: auto
+    sha256: da71b80ef5d9bfbe6ad6a7701e16763bb206e31d9da0fff656ce27e57de22234
+
+  # ---------- IT: both major IT sites bot-block automated fetches ----------
+  # Verified 2026-09-05: tcs.com and infosys.com return HTTP 403 (text/html
+  # challenge page) even with full browser headers and a Referer. Not worth
+  # defeating - the manual path keeps them reproducible via checksum.
+  - ticker: TCS
+    doc_type: annual_report
+    fiscal_year: 2025
+    title: Integrated Annual Report 2024-25
+    url: https://www.tcs.com/content/dam/tcs/investor-relations/financial-statements/2024-25/ar/annual-report-2024-2025.pdf
+    fetch: manual
+    sha256: null
+
+  - ticker: INFY
+    doc_type: annual_report
+    fiscal_year: 2025
+    title: Integrated Annual Report 2024-25
+    url: https://www.infosys.com/investors/reports-filings/annual-report/annual/documents/infosys-ar-25.pdf
+    fetch: manual
+    sha256: null

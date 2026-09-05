@@ -18,7 +18,7 @@ This system routes instead:
 | "How has RELIANCE traded since its FY25 report was published?" | SQL over price series + filing date |
 | "R&D spend grew faster than revenue — quantify it and explain why" | SQL + Calculator + Document RAG + synthesis |
 
-> **Status: Day 1 of 7.** This README describes what is *built*, not what is
+> **Status: Day 2 of 7.** This README describes what is *built*, not what is
 > planned. See [Roadmap](#roadmap) for the honest state of each subsystem.
 
 ---
@@ -96,15 +96,25 @@ uv run mypy
 Built so far — the structured half of the corpus:
 
 ```
-configs/companies.yaml
-        |
-        v
-  acquire_prices.py ---> yfinance .NS ---> prices  (daily OHLCV)
-  acquire_facts.py  ---> yfinance      ---> facts   (the evaluation oracle)
-        |
-        v
-   PostgreSQL :5433
+configs/companies.yaml                    configs/documents.yaml
+        |                                          |
+        v                                          v
+  acquire_prices.py --> prices              download_docs.py  (sha256-pinned)
+  acquire_facts.py  --> facts  <-- ORACLE          |
+        |                                          v
+        |                                   parse_documents.py
+        |                                          |
+        |                            +-------------+-------------+
+        |                            v             v             v
+        |                          text/        tables        figures
+        |                         headings    (structured)   (PNG on disk)
+        |                            |             |             |
+        +----------------------------+------ elements ----------+
+                                     |
+                              PostgreSQL :5433
 ```
+
+Joined on `ticker` + fiscal year: `facts.period_end` year == `documents.fiscal_year`.
 
 Target, by Day 7:
 
@@ -139,8 +149,8 @@ Target, by Day 7:
 
 | Day | Scope | Status |
 |---|---|---|
-| 1 | Scaffold, migrations, corpus, prices, financial oracle | in progress |
-| 2 | Parser benchmark, typed element store, table extraction | not started |
+| 1 | Scaffold, migrations, corpus, prices, financial oracle | done |
+| 2 | Parser benchmark, typed element store, table extraction | done |
 | 3 | Chunking, embeddings, Qdrant, **auto-generated benchmark**, baseline metrics | not started |
 | 4 | Hybrid retrieval, reranking, measured improvement over baseline | not started |
 | 5 | SQL agent (read-only, validated), calculator, price tool, vision agent | not started |
@@ -161,6 +171,7 @@ Architecture decision records live in [`docs/adr/`](docs/adr/).
 | [001](docs/adr/0001-domain-and-corpus.md) | Indian listed equities; why the oracle drives the domain choice |
 | [002](docs/adr/0002-llm-provider-stack.md) | Groq primary, Ollama local, OpenRouter benchmark — at ₹0 |
 | [003](docs/adr/0003-provenance-schema.md) | Provenance attached at extraction time |
+| [004](docs/adr/0004-pdf-parser.md) | PyMuPDF over pdfplumber — 30-60x faster, same oracle recall |
 
 ---
 

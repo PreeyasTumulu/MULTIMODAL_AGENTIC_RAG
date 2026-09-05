@@ -10,9 +10,31 @@ from analyst.db import session_scope
 
 COUNTS = """
 SELECT 'companies' AS table, count(*) AS rows FROM companies
-UNION ALL SELECT 'prices', count(*) FROM prices
-UNION ALL SELECT 'facts',  count(*) FROM facts
+UNION ALL SELECT 'prices',    count(*) FROM prices
+UNION ALL SELECT 'facts',     count(*) FROM facts
+UNION ALL SELECT 'documents', count(*) FROM documents
+UNION ALL SELECT 'elements',  count(*) FROM elements
 ORDER BY 1
+"""
+
+ELEMENTS = """
+SELECT d.ticker, d.fiscal_year AS fy, d.n_pages AS pages,
+       count(*) FILTER (WHERE e.type = 'text')    AS text,
+       count(*) FILTER (WHERE e.type = 'heading') AS heading,
+       count(*) FILTER (WHERE e.type = 'table')   AS "table",
+       count(*) FILTER (WHERE e.type = 'figure')  AS figure
+FROM documents d JOIN elements e ON e.document_id = d.document_id
+GROUP BY d.ticker, d.fiscal_year, d.n_pages
+ORDER BY d.ticker, d.fiscal_year
+"""
+
+# Proof that provenance survived: a real extracted table, addressable by page.
+SAMPLE_TABLE = """
+SELECT element_id, page, table_json->>'n_rows' AS rows,
+       left(table_json->>'header', 60) AS header
+FROM elements
+WHERE type = 'table' AND (table_json->>'n_rows')::int BETWEEN 4 AND 12
+ORDER BY document_id, page LIMIT 4
 """
 
 # The kind of question the SQL Agent will answer on Day 5, written by hand today
@@ -64,6 +86,8 @@ def main() -> None:
     with session_scope() as s:
         show(s, "row counts", COUNTS)
         show(s, "reporting currency (NOT always the quote currency)", CURRENCIES)
+        show(s, "elements extracted per document", ELEMENTS)
+        show(s, "sample extracted tables (provenance intact)", SAMPLE_TABLE)
         show(s, "Total Revenue FY26 vs FY25 (crore, in reporting ccy)", REVENUE)
         show(s, "latest close, sample", PRICE_JOIN)
 

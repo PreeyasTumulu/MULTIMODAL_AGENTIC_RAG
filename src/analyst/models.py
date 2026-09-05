@@ -14,11 +14,14 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Money in paise-precision INR. Reliance FY26 revenue is ~1.06e13, so an 18-digit
@@ -65,6 +68,62 @@ class Price(Base):
         UniqueConstraint("ticker", "trade_date", name="uq_prices_ticker_date"),
         Index("ix_prices_ticker_date", "ticker", "trade_date"),
     )
+
+
+class Document(Base):
+    """A source PDF.
+
+    `fiscal_year` is the year the Indian FY *ends* (FY2024-25 -> 2025), which is
+    exactly `facts.period_end`'s year. That is the join key between the
+    unstructured and structured halves of the corpus - no mapping table needed.
+    """
+
+    __tablename__ = "documents"
+
+    document_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    ticker: Mapped[str] = mapped_column(
+        ForeignKey("companies.ticker", ondelete="CASCADE"), index=True
+    )
+    doc_type: Mapped[str] = mapped_column(String(40), index=True)
+    fiscal_year: Mapped[int] = mapped_column(Integer, index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    source_url: Mapped[str] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(String(64))
+    local_path: Mapped[str] = mapped_column(Text)
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    n_pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("ticker", "doc_type", "fiscal_year", name="uq_documents_identity"),
+    )
+
+
+class ElementRow(Base):
+    """One extracted unit of a document: a text block, heading, table or figure.
+
+    The relational mirror of `provenance.Element`. Chunking (Day 3) reads from
+    here, so `bbox` and `page` survive all the way to a rendered citation.
+    """
+
+    __tablename__ = "elements"
+
+    element_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.document_id", ondelete="CASCADE"), index=True
+    )
+    page: Mapped[int] = mapped_column(Integer, index=True)
+    type: Mapped[str] = mapped_column(String(20), index=True)
+    # "order" is a SQL keyword; naming the column seq avoids relying on quoting.
+    seq: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    table_json: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    image_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bbox: Mapped[list[float] | None] = mapped_column(JSONB, nullable=True)
+
+    __table_args__ = (Index("ix_elements_doc_page", "document_id", "page"),)
 
 
 class Fact(Base):

@@ -9,11 +9,14 @@ dependencies = [
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
+    "httpx>=0.28",
     "yfinance>=0.2.50",
     "pandas>=2.2",
     "pyyaml>=6.0",
     "structlog>=24.4",
     "tenacity>=9.0",
+    "pymupdf>=1.28.2",
+    "pdfplumber>=0.11.10",
 ]
 
 [dependency-groups]
@@ -43,7 +46,7 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN"]
 ignore = ["ANN401"]
 
 [tool.ruff.lint.per-file-ignores]
-"alembic/versions/*" = ["E501"]  # generated code
+"alembic/versions/*" = ["E501", "I001"]  # generated code
 "scripts/*" = ["T201"]
 
 [tool.mypy]
@@ -56,3 +59,10 @@ files = ["src", "scripts", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
+
+# pymupdf ships no type stubs, so every call into it reads as untyped. Relaxing
+# the rule for the two modules that touch it keeps strict mode everywhere else
+# rather than weakening the whole project.
+[[tool.mypy.overrides]]
+module = ["analyst.parsing", "benchmark_parsers"]
+disallow_untyped_calls = false
