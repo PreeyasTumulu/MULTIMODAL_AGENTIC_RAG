@@ -7,29 +7,88 @@ Notable changes per development day. Format loosely follows
 
 ## [Unreleased]
 
-### Day 3 is incomplete — read this before running anything
+### The Day 3 baseline — dense retrieval, and it is bad
 
-> ⚠️ **The Qdrant collection `elements_bge-small` is PARTIAL** (~3,328 of 9,982
-> points). Indexing was interrupted. **Do not run notebook 08 against it** — it
-> would produce a baseline that looks real and is wrong.
+The index is complete: `elements_bge-small` holds **9,982 of 9,982 points**,
+rebuilt from scratch. Notebook 08 has run. This is the number every later change
+is measured against, and it is not a good one.
 
-Pick up here:
+44 benchmark questions, **zero LLM calls**:
 
-1. Re-run [`notebooks/07_index_chunks.ipynb`](../notebooks/07_index_chunks.ipynb).
-   It calls `recreate()`, so it drops and rebuilds. ~30 min; background it.
-2. Run [`notebooks/08_evaluate_retrieval.ipynb`](../notebooks/08_evaluate_retrieval.ipynb)
-   for the first real Recall@k / MRR baseline. Costs no LLM quota.
-3. Execute the remaining notebooks so they ship **with outputs**. Only 06 and 09
-   have them today.
-4. Write ADR-006 (embedding model): index `bge-base` as a second collection and
-   compare on the same 44 questions. Do not pick a model by reputation.
-5. Flip the ✅/🔜 markers in `docs/`, regenerate `data/schema.md` via notebook 10.
+| config | R@1 | R@5 | R@10 | MRR | pR@5 | p50 |
+|---|---|---|---|---|---|---|
+| `bge-small` + filters | 0.023 | **0.045** | 0.091 | 0.039 | 0.091 | 74 ms |
+| `bge-small`, no filters | 0.023 | 0.045 | 0.091 | 0.035 | 0.091 | 74 ms |
 
-### Then — Day 4
+**40 of 44 questions never retrieve the correct element in the top 10.** Growth
+questions score 0.000 at every k. Metadata filtering changes MRR by 0.004, which
+on four hits is noise — it has not yet earned its complexity, and saying so is
+the point of measuring it.
 
-Hybrid dense + sparse retrieval, cross-encoder reranking, and the measured
-improvement over the Day 3 baseline. The delta is the deliverable, not the
-technique.
+### Verified before being believed
+
+A number this bad is more likely to be a broken evaluator than a broken
+retriever, so it was checked three ways before being recorded:
+
+- **Element IDs match.** Expected and indexed IDs are the same `str` format — no
+  type mismatch silently emptying the set intersection.
+- **The retrievability ceiling is 100%.** All 54 expected element IDs are present
+  in the index, across all 44 questions. Nothing was lost to chunking or the
+  table budget. The evidence is there; the retriever fails to rank it.
+- **It reproduces.** Two independent full drop-and-rebuild cycles produced
+  identical metrics and an identical per-ticker miss breakdown.
+
+The baseline is real.
+
+### The measurement that reorders Day 4
+
+Rank of the correct element, searching to depth 200:
+
+| depth | 5 | 10 | 20 | 50 | 100 | 200 |
+|---|---|---|---|---|---|---|
+| recall | 0.045 | 0.091 | 0.136 | 0.182 | 0.273 | 0.273 |
+
+**32 of 44 questions have no correct element anywhere in the top 200.** A
+cross-encoder reranker only reorders what dense retrieval already surfaced, so on
+this corpus **a reranker is capped at 0.273 recall no matter how good it is.**
+
+Day 4 therefore leads with **hybrid sparse + dense retrieval**, and adds the
+reranker second. These queries are numeric and entity-heavy — "net profit",
+"FY2025", "HDFC Bank" — which is what lexical matching catches and what dense
+embeddings blur across financial table rows that are mostly digits. Recall at
+depth has to move before reranking has anything to work with.
+
+> ⚠️ **Read the baseline with its caveat.** Ground truth is *single-anchor*: each
+> question names one element that contains the answer. Retrieval that surfaces a
+> different page also stating the answer scores as a miss. True quality is better
+> than 0.045 — the metric is strict by construction. The Day 4 delta will be
+> measured the same strict way, so the comparison is fair, but neither number
+> should be quoted as absolute retrieval quality.
+
+### Fixed — notebook outputs were mostly log noise
+
+`configure_logging()` called `basicConfig(level="INFO")`, which sets the *root*
+logger; `httpx` propagates to it. Every HTTP call became a saved output line —
+~40 upserts per index run, ~90 searches per eval — burying the actual results.
+`httpx`, `httpcore`, `urllib3` and `qdrant_client` are now pinned to `WARNING`,
+behind a `quiet_third_party` flag so transport bugs stay debuggable. Notebook 07
+shrank 36% and notebook 08 48%, all of it noise.
+
+### Next
+
+1. **Day 4**: hybrid sparse + dense, then the cross-encoder reranker, then re-run
+   notebook 08. The delta is the deliverable, not the technique.
+2. Execute notebooks 01–05 and 10 so they ship **with outputs** (06–09 have them).
+3. ADR-006 (embedding model): index `bge-base` as a second collection and compare
+   on the same 44 questions. Do not pick a model by reputation.
+4. Flip the ✅/🔜 markers in `docs/`, regenerate `data/schema.md` via notebook 10.
+
+### Open, not blocking
+
+- **8,295 of 46,241 elements appear in no chunk.** Probably intentional
+  header/footer/empty filtering, but it is unverified and undocumented.
+- **`qdrant_client` 1.19.0 against server 1.12.4** — major-version skew warning on
+  every connect. Works today; pin or bump.
 
 ---
 
