@@ -16,7 +16,9 @@ The pipeline, in order, as runnable notebooks that **show their output**.
 | 08 | [Evaluate retrieval](08_evaluate_retrieval.ipynb) | Recall@k, MRR — appends to **`results/runs.jsonl`** | ~2 min |
 | 09 | [Explore the corpus](09_explore_corpus.ipynb) | Read-only. Run any time | seconds |
 | 10 | [Regenerate schema docs](10_generate_docs.ipynb) | Rewrites `docs/data/schema.md` | seconds |
-| 11 | [Hybrid retrieval](11_hybrid_retrieval.ipynb) | BM25 + dense, fused by RRF — **the Day 4 lever** | ~35 min |
+| 11 | [Hybrid retrieval](11_hybrid_retrieval.ipynb) | BM25 + dense, fused by RRF | ~35 min |
+| 12 | [Query expansion](12_query_expansion.ipynb) | Closes the question/filing vocabulary gap — **the real lever** | ~2 min |
+| 13 | [Reranking](13_reranking.ipynb) | Cross-encoder over a shortlist — measured, not adopted | ~8 min |
 
 01–08 are a dependency chain: each needs the ones before it to have run at least
 once. 11 needs 01–06. 09 and 10 are safe at any point.
@@ -55,10 +57,9 @@ uv run jupyter nbconvert --to notebook --execute --inplace \
   --ExecutePreprocessor.timeout=3600 notebooks/07_index_chunks.ipynb
 ```
 
-**Currently carrying outputs:** 06, 09, and 07 in part. 08 was rewritten onto the run
-ledger and its outputs were cleared with it — both 07 and 08 need one execution pass
-after the ADR-006 sweep, and 01-05 and 10 have never had one. See the Unreleased
-section of [`docs/CHANGELOG.md`](../docs/CHANGELOG.md).
+**Currently carrying outputs:** 06, 07, 08, 09, 10, 11, 12, 13. **01-05 have never
+been executed with outputs saved** — they are the acquisition and parsing steps, and
+running them re-downloads and re-parses the corpus. That is the one remaining gap.
 
 **Commit notebooks with their outputs.** The saved tables and numbers are the
 point — a notebook stripped of outputs makes a reader run a 30-minute pipeline

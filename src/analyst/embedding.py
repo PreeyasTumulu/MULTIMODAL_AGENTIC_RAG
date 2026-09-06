@@ -13,11 +13,12 @@ the right prefix, so the asymmetry is handled here rather than forgotten at the
 call site.
 """
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 from fastembed import SparseTextEmbedding, TextEmbedding
+from fastembed.rerank.cross_encoder import TextCrossEncoder
 from fastembed.sparse.sparse_embedding_base import SparseEmbedding
 
 
@@ -101,3 +102,27 @@ class SparseEmbedder:
         """BM25 scores a query without document term frequencies, so the query
         side genuinely differs from the document side - same asymmetry as BGE."""
         return next(iter(self._model.query_embed([text])))
+
+
+# 80 MB and CPU-only. bge-reranker-base is stronger and 1 GB, which the
+# GPU-less deploy target cannot justify for a first measurement.
+RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
+
+
+class Reranker:
+    """Cross-encoder: scores the query and passage *together*.
+
+    A bi-encoder (everything above) embeds the query and the passage separately
+    and compares the two vectors, so it never sees them side by side. A cross
+    encoder reads the pair jointly and is far more accurate - and far too slow
+    to run over 9,982 chunks, which is why it only ever reorders a shortlist.
+
+    It therefore cannot improve on what retrieval already surfaced: recall at
+    the shortlist depth is a hard ceiling on anything this can do.
+    """
+
+    def __init__(self, name: str = RERANK_MODEL) -> None:
+        self._model = TextCrossEncoder(model_name=name)
+
+    def scores(self, query: str, documents: Sequence[str]) -> list[float]:
+        return list(self._model.rerank(query, list(documents)))

@@ -1,76 +1,88 @@
 # ADR-006: Choosing the embedding model by measurement
 
-- **Status:** Proposed — the decision rule below is fixed; the sweep has not run yet
+- **Status:** Accepted — sweep run 2026-09-06; **`bge-small` retained**
 - **Date:** 2026-09-06
 - **Resolves the forward reference in** [ADR-005](0005-vector-store.md)
+- **Evidence:** [`results/leaderboard.md`](../../results/leaderboard.md), generated from
+  [`results/runs.jsonl`](../../results/runs.jsonl)
 
 ## Decision
 
-**The decision rule is recorded before the numbers, not after.** Every candidate
-in `analyst.embedding.MODELS` is indexed as its own collection and scored on the
-same 44 questions. The winner is the model with the highest **Recall@5**; ties
-inside ±0.02 (one question on a 44-question benchmark) go to the smaller model,
-because the deployment target has no GPU.
+**Keep `bge-small-en-v1.5`.** All four candidates were indexed as full 9,982-point
+collections and scored on the same 44 questions. Nothing beat the incumbent by a
+margin this benchmark can resolve.
 
-Runs append to `results/runs.jsonl` and the table regenerates into
-`results/leaderboard.md`, so this ADR cites a file rather than a screenshot.
+| model | dim | R@1 | R@5 | R@10 | MRR | p50 | index time |
+|---|---|---|---|---|---|---|---|
+| `bge-base` | 768 | 0.000 | **0.091** | 0.114 | 0.030 | 396 ms | **96 min** |
+| `minilm` | 384 | **0.045** | 0.068 | 0.114 | **0.056** | 20 ms | ~25 min |
+| **`bge-small`** | 384 | 0.023 | 0.045 | 0.091 | 0.039 | 85 ms | ~30 min |
+| `arctic-s` | 384 | 0.023 | 0.045 | 0.045 | 0.034 | 14 ms | **20 min** |
 
-| candidate | dim | size | why it is here |
-|---|---|---|---|
-| `bge-small-en-v1.5` | 384 | 0.07 GB | Day 3 baseline. R@5 **0.045** |
-| `bge-base-en-v1.5` | 768 | 0.21 GB | Same family, ~2× bigger. Isolates *capacity* |
-| `snowflake-arctic-embed-s` | 384 | 0.13 GB | Different family, tuned for retrieval |
-| `all-MiniLM-L6-v2` | 384 | 0.09 GB | The common default. Included to be beaten |
+## Why not `bge-base`, which "won"
 
-## Why measure at all, given the baseline
+**The pre-registered rule picks `bge-base`. Following it would have been wrong,
+and the rule was the thing at fault.**
 
-The Day 3 depth curve is the reason to keep expectations low, and to run the
-sweep anyway.
+The rule said *highest Recall@5 wins, ties inside 0.02 go to the smaller model*.
+On 44 questions **one question is worth 0.023**, so the tie-band was narrower
+than the smallest difference that can exist. It could not help but declare a
+winner. That is a flaw in how the rule was written, not a finding — and writing
+it down beforehand is what made the flaw visible instead of invisible.
 
-**25 of 44 questions have no correct element anywhere in the top 200** (recall
-0.432 at depth, corrected — the figure first recorded, 0.273, came from an
-unfiltered run compared against a filtered headline; see the CHANGELOG). The
-failure is not ranking; it is that near-identical numeric table rows collapse
-together in embedding space. A larger model in the same family reshuffles ranks
-— it does not obviously fix that. So this sweep is expected to produce a *small*
-delta, and hybrid sparse retrieval remains the main Day 4 lever.
+The evidence against acting on it:
 
-Recording that expectation now is the point. If `bge-base` does move recall
-materially, the prediction was wrong in an interesting way; if it does not, the
-project has evidence for its model choice instead of a preference.
+- **The whole spread is two questions.** R@5 of 0.091 is 4 questions of 44;
+  0.045 is 2. Every 95% interval overlaps every other: `bge-base`
+  [0.006, 0.176] against `bge-small` [0.000, 0.107].
+- **The hits do not nest.** `bge-base` found 3 questions `bge-small` missed and
+  *missed one `bge-small` found*. A genuinely better model would be close to a
+  superset. This is reshuffling.
+- **It wins the chosen metric and loses the others.** `bge-base` is last on MRR
+  (0.030) and last on R@1 (**0.000** — it never ranks a correct answer first).
+  That pattern is the signature of noise.
+- **It costs 3-5x more.** 96 minutes to index against 20-25, and 396 ms per
+  query against 14-20, on a deploy target with no GPU.
 
-Two questions the sweep answers either way:
+## The result that actually mattered
 
-- **Does dimension buy recall here?** 384 → 768 doubles index size and query
-  cost. On this corpus it may buy nothing.
-- **Is the family or the size doing the work?** `arctic-s` is a different family
-  at the same 384 dimensions, which separates the two.
+**38 of 44 questions are retrieved by no model at all.** The union of all four
+is 6 questions. Every hit belongs to RELIANCE or ICICIBANK; **SUNPHARMA supplies
+24 of the 44 questions and scores zero on every model.**
+
+So the sweep's real value is negative evidence, and that was worth 2.5 hours:
+**the embedding model is not the bottleneck.** It closes off buying a bigger
+encoder — the obvious, expensive next move — before a week goes into it. The
+cause turned out to be a vocabulary mismatch between question and filing, which
+[ADR-007](0007-retrieval-strategy.md) addresses.
 
 ## Alternatives considered
 
 | Option | Verdict |
 |---|---|
-| **Pick by MTEB leaderboard** | Rejected — MTEB is not Indian annual reports, and the failure mode here is numeric tables, which no general benchmark measures. Cheap and unjustifiable. |
-| **BGE-M3 / e5-large** | Rejected for now. Strong models, but 2+ GB and slow on CPU; the AWS free-tier target has no GPU, so a model that cannot be deployed is not a candidate. |
-| **A financial-domain fine-tune** | Out of scope in a one-week build. Worth revisiting once hybrid retrieval sets an honest ceiling. |
-| **Skip the sweep, go straight to hybrid** | Tempting, and defensible on expected payoff. Rejected because the sweep is ~30 min per model of *unattended* compute and the cost is attention, not time — and an unmeasured model choice is the exact thing this project exists to avoid. |
+| **Adopt `bge-base` per the rule** | Rejected. Two questions, non-nesting, worse on MRR and R@1, 5x the index cost. Following a rule whose premise has failed is not rigour. |
+| **Adopt `minilm`** | Genuinely tempting — best MRR (0.056), best R@1, 20 ms queries. Rejected on the same logic: one question of separation is not evidence. Revisit if the benchmark grows. |
+| **Pick by MTEB leaderboard** | Rejected before the sweep and vindicated by it. MTEB is not Indian annual reports, and the failure here is numeric tables, which no general benchmark measures. |
+| **BGE-M3 / e5-large** | Rejected: 2+ GB, slow on CPU, and the free-tier target has no GPU. A model that cannot deploy is not a candidate. |
 
 ## Tradeoffs
 
-- **Given up:** ~2 hours of unattended indexing and roughly 1 GB of disk across
-  four collections.
-- **Given up:** breadth. Only CPU-deployable models are tested, so the sweep
-  cannot say what the best available embedding model is — only the best one that
-  can actually ship here.
-- **Accepted:** the benchmark is single-anchor, so all four models are scored
-  strictly and identically. The ranking is trustworthy; the absolute numbers are
-  a floor.
+- **Given up:** ~2.5 hours of unattended indexing and ~1 GB across four
+  collections, to learn that the variable does not matter. That is a real cost
+  and the right trade — the alternative was guessing.
+- **Given up:** breadth. Only CPU-deployable models were tested, so this says
+  nothing about the best embedding model in general — only the best one that can
+  ship here.
+- **Accepted:** a 44-question benchmark cannot resolve differences smaller than
+  ~0.05 recall. Any future model comparison needs either a bigger benchmark or a
+  much larger effect.
 
 ## Consequences
 
-- `analyst.embedding.DEFAULT_MODEL` changes only if the sweep says so, and this
-  ADR is updated to **Accepted** with the winning row.
-- Losing collections are dropped after the decision. The ledger keeps the
-  evidence, so nothing is lost by deleting the vectors.
-- The same ledger measures Day 4's hybrid and reranked retrievers, which is what
-  makes "hybrid beat dense by X" a comparison rather than an assertion.
+- `analyst.embedding.DEFAULT_MODEL` stays `bge-small`.
+- The losing collections can be dropped; the ledger keeps the evidence, so
+  deleting the vectors loses nothing.
+- **Any future "should we swap the model?" question is already answered** unless
+  the benchmark grows or retrieval quality changes character.
+- The next ADR takes up what the sweep exposed: the question and the filing do
+  not use the same words.

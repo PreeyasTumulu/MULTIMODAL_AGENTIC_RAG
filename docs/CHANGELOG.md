@@ -23,62 +23,97 @@ costs nothing. `results/leaderboard.md` regenerates from the ledger.
 `results/` is committed, unlike `data/`. The corpus is reproducible from the
 manifest; a measurement is not reproducible without the compute that made it.
 
-- **The retriever is injected, not imported.** `evaluate()` takes a callable, so
-  dense, hybrid and reranked retrieval are scored by identical code on identical
-  questions — which is the only reason a delta means anything. It also lets the
-  evaluation tests run with a fake retriever, no Qdrant and no embeddings.
-- `analyst.retrievers` holds one factory per strategy. Day 4's hybrid and
-  reranked retrievers land beside `dense` without touching the scoring code.
-- **`RunConfig.filters` is a string, not a bool.** Three policies that differ by
-  0.16 recall at depth would otherwise have recorded as the same run, which
-  would have made the ledger confidently wrong rather than merely incomplete.
-- Notebook 07 now sweeps **one collection per model** and is **resumable** — a
-  collection already at full point count is skipped, so a two-hour sweep does
-  not restart from zero after one failure.
-- Notebook 08 scores from the package instead of a notebook-local `evaluate()`,
-  and the depth curve is finally reproducible code rather than prose in this file.
-- [ADR-006](adr/0006-embedding-model.md) — **Proposed**, with the decision rule
-  fixed *before* the sweep runs: highest Recall@5 wins, ties inside 0.02 go to
-  the smaller model. The expectation is recorded too: given that 25 of 44
-  questions have no correct element in the top 200, a bigger model in the same
-  family is predicted to move little. Being wrong about that would be the
-  interesting outcome.
+**The retriever is injected, not imported.** `evaluate()` takes a callable, so
+every configuration below was scored by identical code on identical questions.
+The detail of what landed is in the Day 4 entry below.
 
-Checks: **63 tests** (was 37), `ruff` clean, `mypy --strict` clean on 29 files.
+### Day 4 — the sweep, and what it exposed
 
-> ⚠ Rewriting notebook 08 onto the ledger cleared its saved outputs, and two of
-> notebook 07's. Both need one execution pass once the sweep has run; until then
-> the only recorded numbers for Day 3 are the tables in this file.
+Four embedding models indexed in full and six retrieval configurations measured,
+all in [`results/leaderboard.md`](../results/leaderboard.md). Two ADRs came out of
+it: [ADR-006](adr/0006-embedding-model.md) (embedding model) and
+[ADR-007](adr/0007-retrieval-strategy.md) (retrieval strategy).
 
-### Added — hybrid retrieval (built and tested, **not yet measured**)
+#### The embedding model is not the bottleneck
 
-The Day 4 lever, in code. No number is claimed for it yet: the collection has
-not been built, so nothing below is a result.
+`bge-base`, `arctic-s` and `minilm` were each indexed to the full 9,982 points and
+scored on the same 44 questions. **The entire spread across four models is two
+questions.** `bge-base` "won" R@5 at 0.091 (4 of 44) while finishing *last* on MRR
+and R@1, missing a question `bge-small` finds, and costing 96 minutes to index
+against 20-25. **38 of 44 questions are retrieved by no model at all.**
 
-- `analyst.embedding.SparseEmbedder` — BM25 via fastembed's `Qdrant/bm25`.
-  **Statistical, not neural**: 10 MB, no ONNX session, runs on the GPU-less
-  deploy target. `520,412.5` and `438,860.1` are near-identical to a dense
-  encoder and completely different tokens to BM25, which is the whole argument.
-- `analyst.vectorstore.HybridStore` — named `dense` + `sparse` vectors, fused
-  **server-side by RRF** in a single query. RRF combines the two rankings by
-  *position*: a cosine score and a BM25 score are not on the same scale, and
-  normalising them is a fudge with a tuning knob attached.
-- A **separate** `elements_hybrid_<model>` collection. Qdrant fixes a
-  collection's vector layout at creation, so hybrid cannot be added to the
-  existing dense ones without destroying them — and those are ADR-006's evidence.
-- `analyst.retrievers.hybrid` takes the same filter policies as `dense`, so the
-  two are directly comparable in the ledger.
-- Notebook 11 indexes, scores, and prints the delta against the dense baseline
-  read back from `results/runs.jsonl`.
+`bge-small` is retained. The 2.5 hours bought negative evidence, which was the
+point: buying a bigger encoder is now a closed question rather than a hunch.
 
-Shared store logic (payload, point IDs, filters, hit parsing) moved to
-module-level helpers rather than being duplicated across the two classes.
+> The pre-registered decision rule picked `bge-base`, and following it would have
+> been wrong. The tie-band was 0.02 on a 44-question benchmark where **one
+> question is 0.023** — narrower than the smallest difference that can exist.
+> Writing the rule down beforehand is what made that visible.
 
-### Fixed — a stale throughput number in the source
+#### The real problem: the question and the filing use different words
 
-`embedding.py` still documented `parallel=8` at **8.7 chunks/sec**. Two careful
-re-measurements put it at **6.2-6.3**; the 8.7 came from a short, badly sampled
-window. The docstring now says 6.2 and explains why the first number was wrong.
+**A question and the element answering it share a median of two words.** The
+question asks for *total revenue in FY2024*; the filing prints *Revenue from
+contracts with customers* under *Year ended March 31, 2024*.
+
+`CONCEPT_ALIASES` already held the mapping — it is how notebook 06 anchored every
+question — and the retriever had never used it at query time. Feeding those
+labels plus the real date form into the query:
+
+| retriever | R@5 | MRR | @50 | @100 | @200 |
+|---|---|---|---|---|---|
+| dense (baseline) | 0.045 | 0.039 | 0.227 | 0.273 | 0.432 |
+| dense+expand | 0.068 | **0.056** | 0.364 | 0.477 | 0.682 |
+| hybrid+expand | 0.068 | 0.054 | **0.477** | **0.614** | **0.727** |
+
+**Recall at depth went 0.432 to 0.727** — 19 findable questions became 32.
+SUNPHARMA went from 0 to 17 of 24; growth questions from 0 to 5 of 10.
+
+#### Two predictions that were wrong, recorded as such
+
+- **BM25 alone was predicted to be the Day 4 lever. It was not.** The argument was
+  that `520,412.5` is a unique lexical token — but **0 of 44 questions contain the
+  figure they ask for**, so BM25 had nothing to match. Alone it *lowered* the
+  ceiling to 0.364. It only earns its place combined with expansion, where it
+  gives the best pool at depth.
+- **The reranker was predicted to pay off once the pool improved. It did not.**
+  One question at R@5, a question *lost* at R@10, MRR down 0.056 to 0.046, and
+  **60x the latency** (5,314 ms against 88 ms). `ms-marco-MiniLM-L-6-v2` is
+  trained on web prose; our passages are grids of numbers. Kept in the package
+  and tested, kept out of the default path.
+
+#### Added
+
+- `analyst.evaluation` — the run ledger. A run is a record: config, benchmark
+  content-hash, git rev (`-dirty` when uncommitted), metrics, depth curve,
+  appended to `results/runs.jsonl`. **The retriever is injected, not imported**, so
+  every configuration above was scored by identical code on identical questions.
+- `analyst.retrievers` — `dense`, `hybrid`, `expand_query`, `reranked`. Reranking
+  composes over any retriever because they are all just a `SearchFn`.
+- `analyst.embedding` — `SparseEmbedder` (BM25, 10 MB, statistical not neural)
+  and `Reranker` (cross-encoder).
+- `analyst.vectorstore.HybridStore` — named dense + sparse vectors, RRF fused
+  server-side. RRF combines rankings by *position*, so there is no scale
+  normalisation fudge and no weight to tune.
+- Notebooks **11** (hybrid), **12** (query expansion), **13** (reranking).
+- `RunConfig.filters` is a string, not a bool: three policies differing by 0.16
+  recall at depth would otherwise have recorded as the same run.
+- `RunConfig.points` records the index size scored, so a partial index can never
+  look like a complete one.
+
+#### Fixed
+
+- **A second corpus tree at `notebooks/data/`.** `settings.data_dir` was
+  CWD-relative and `nbconvert` runs notebooks with `CWD=notebooks/`, so a headless
+  run wrote its own copy. Paths now anchor to the repo root, with a regression
+  test that `chdir`s away. `schema_docs` had the same bug.
+- **A stale throughput number.** `embedding.py` documented `parallel=8` at 8.7
+  chunks/sec; two careful re-measurements say **6.2-6.3**. The 8.7 came from a
+  short, badly sampled window.
+- **The Day 3 depth curve was measured with the wrong retriever** — unfiltered,
+  while the headline table beside it was filtered. Corrected below.
+
+Checks: **68 tests**, `ruff` clean, `mypy --strict` clean on 29 files.
 
 ### The Day 3 baseline — dense retrieval, and it is bad
 
@@ -174,12 +209,15 @@ shrank 36% and notebook 08 48%, all of it noise.
 
 ### Next
 
-1. **Day 4**: hybrid sparse + dense, then the cross-encoder reranker, then re-run
-   notebook 08. The delta is the deliverable, not the technique.
-2. Execute notebooks 01–05 and 10 so they ship **with outputs** (06–09 have them).
-3. Run the ADR-006 sweep (notebook 07 with `SWEEP = list(MODELS)`), then flip
-   that ADR to Accepted with the winning row.
-4. Flip the ✅/🔜 markers in `docs/`, regenerate `data/schema.md` via notebook 10.
+1. **Contextual chunk prefixes.** Query expansion fixed the *question* side of the
+   vocabulary gap; the document side is untouched. The element answering a
+   SUNPHARMA revenue question carries no company name, no fiscal year and no
+   statement title. Prefixing each chunk with `SUNPHARMA FY2024 - Statement of
+   Profit and Loss` gives both halves something to match. Needs a re-index.
+2. Execute notebooks **01-05** so they ship with outputs. The only remaining gap.
+3. Growth questions (10 of 44) stay at zero by construction - their evidence spans
+   two annual reports, so no single chunk answers them. That is multi-document
+   reasoning, an agent problem rather than a retrieval one.
 
 ### Open, not blocking
 

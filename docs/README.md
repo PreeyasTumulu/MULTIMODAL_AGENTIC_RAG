@@ -16,6 +16,7 @@ Everything about this system that is not the code itself.
 | 8 | [API specification](architecture/api.md) | Endpoints, schemas, errors, streaming |
 | 9 | [Runbook](operations/runbook.md) | How to run, rebuild, migrate and debug it |
 | 10 | [Decision records](adr/) | Why each significant choice was made, and what was rejected |
+| 11 | **[Retrieval leaderboard](../results/leaderboard.md)** | **Every measured run, generated from the ledger** |
 | 11 | [Changelog](CHANGELOG.md) | What changed, when |
 
 ---

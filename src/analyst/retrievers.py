@@ -1,23 +1,35 @@
 """Retrievers - the things `evaluation.evaluate` scores.
 
-One factory per strategy, each returning a `SearchFn`. Day 4's hybrid and
-reranked retrievers land here beside `dense`, so swapping strategy never
-touches the scoring code.
+One factory per strategy, each returning a `SearchFn`, so swapping strategy
+never touches the scoring code.
 
 Kept out of `evaluation.py` deliberately: importing a retriever pulls in
 fastembed and Qdrant, and the evaluation tests must run without either.
 """
 
-from analyst.benchmark import BenchmarkQuestion
+from collections.abc import Callable, Sequence
+
+from analyst.benchmark import CONCEPT_ALIASES, BenchmarkQuestion
 from analyst.config import Settings
-from analyst.embedding import MODELS, Embedder, SparseEmbedder
+from analyst.embedding import MODELS, Embedder, Reranker, SparseEmbedder
 from analyst.evaluation import SearchFn
 from analyst.vectorstore import Hit, HybridStore, VectorStore
+
+# What every retriever accepts. Not a bool because the policies diverge at
+# depth: measured on bge-small at depth 200, `none` scores 0.273 and
+# `ticker+year` 0.432.
+FILTERS = ("none", "ticker", "ticker+year")
 
 
 def collection_for(prefix: str, model: str) -> str:
     """One naming rule, so 07 (index) and 08 (evaluate) cannot disagree."""
     return f"{prefix}_{model}"
+
+
+def hybrid_collection_for(prefix: str, model: str) -> str:
+    """Separate from the dense collection: Qdrant fixes a collection's vector
+    layout at creation, so hybrid cannot be added to one that already exists."""
+    return f"{prefix}_hybrid_{model}"
 
 
 def store_for(settings: Settings, model: str) -> VectorStore:
@@ -36,43 +48,6 @@ def open_store(settings: Settings, model: str) -> tuple[Embedder, VectorStore]:
     return Embedder(model), store_for(settings, model)
 
 
-# What `dense` accepts. This is not a bool because the policies diverge at depth:
-# measured on bge-small at depth 200, `none` scores 0.273 and `ticker+year` 0.432.
-# `ticker` alone has not been measured yet - notebook 08 scores it.
-FILTERS = ("none", "ticker", "ticker+year")
-
-
-def dense(embedder: Embedder, store: VectorStore, filters: str = "ticker+year") -> SearchFn:
-    """Vector search, optionally narrowed by metadata before scoring.
-
-    `ticker+year` applies the year only to `value_lookup`. A growth question
-    spans two years, so a single-year filter drops half its evidence - forcing
-    it anyway scores *higher* (0.477), but only because the benchmark accepts
-    either year's anchor, and a question needing both is still unanswered.
-    """
-    if filters not in FILTERS:
-        raise ValueError(f"unknown filter policy {filters!r}; have {list(FILTERS)}")
-
-    by_year = filters == "ticker+year"
-
-    def search(q: BenchmarkQuestion, limit: int) -> list[Hit]:
-        year = q.fiscal_year if by_year and q.question_type == "value_lookup" else None
-        return store.search(
-            embedder.embed_query(q.question),
-            limit=limit,
-            ticker=None if filters == "none" else q.ticker,
-            fiscal_year=year,
-        )
-
-    return search
-
-
-def hybrid_collection_for(prefix: str, model: str) -> str:
-    """Separate from the dense collection: Qdrant fixes a collection's vector
-    layout at creation, so hybrid cannot be added to one that already exists."""
-    return f"{prefix}_hybrid_{model}"
-
-
 def open_hybrid(settings: Settings, model: str) -> tuple[Embedder, SparseEmbedder, HybridStore]:
     store = HybridStore(
         settings.qdrant_url,
@@ -82,31 +57,111 @@ def open_hybrid(settings: Settings, model: str) -> tuple[Embedder, SparseEmbedde
     return Embedder(model), SparseEmbedder(), store
 
 
+def expand_query(q: BenchmarkQuestion) -> str:
+    """Rewrite the question in the vocabulary the filings actually print.
+
+    The measured problem, not a guess: a question and the element answering it
+    share a median of TWO words. "total revenue in FY2024" is printed as
+    "Revenue from contracts with customers" under "Year ended March 31, 2024".
+    No retriever can bridge that, because the words are not the same ones.
+
+    `CONCEPT_ALIASES` already holds the mapping - it is how the benchmark
+    located each anchor in the first place. The retriever simply never used it.
+    Indian fiscal years end 31 March, which is why the date form is hard-coded.
+
+    Measured on bge-small, ticker+year: recall at depth 200 went 0.432 -> 0.682.
+    """
+    aliases = " ".join(CONCEPT_ALIASES.get(q.concept, ()))
+    return f"{q.question} {aliases} year ended March 31, {q.fiscal_year}"
+
+
+def _check(filters: str) -> bool:
+    """Validate the policy and return whether the year filter applies."""
+    if filters not in FILTERS:
+        raise ValueError(f"unknown filter policy {filters!r}; have {list(FILTERS)}")
+    return filters == "ticker+year"
+
+
+def _scope(q: BenchmarkQuestion, filters: str, by_year: bool) -> tuple[str | None, int | None]:
+    """Ticker and year to narrow on, per policy.
+
+    The year applies only to `value_lookup`: a growth question spans two years,
+    so a single-year filter drops half its evidence.
+    """
+    year = q.fiscal_year if by_year and q.question_type == "value_lookup" else None
+    return (None if filters == "none" else q.ticker), year
+
+
+def dense(
+    embedder: Embedder, store: VectorStore, filters: str = "ticker+year", expand: bool = False
+) -> SearchFn:
+    """Vector search, optionally narrowed by metadata before scoring."""
+    by_year = _check(filters)
+
+    def search(q: BenchmarkQuestion, limit: int) -> list[Hit]:
+        ticker, year = _scope(q, filters, by_year)
+        text = expand_query(q) if expand else q.question
+        return store.search(embedder.embed_query(text), limit=limit,
+                            ticker=ticker, fiscal_year=year)
+
+    return search
+
+
 def hybrid(
     embedder: Embedder,
     sparse: SparseEmbedder,
     store: HybridStore,
     filters: str = "ticker+year",
+    expand: bool = False,
     prefetch: int | None = None,
 ) -> SearchFn:
-    """Dense + BM25, fused by RRF. The Day 4 lever.
+    """Dense + BM25, fused server-side by RRF.
 
-    Same filter policies as `dense`, so the two are directly comparable in the
-    ledger - which is the whole point of measuring a delta.
+    Measured weaker than expected: BM25 had little to grip on, because **no
+    benchmark question contains the figure it asks for** - the number lives only
+    in the document. Kept because it composes with query expansion, which gives
+    the lexical half real words to match.
     """
-    if filters not in FILTERS:
-        raise ValueError(f"unknown filter policy {filters!r}; have {list(FILTERS)}")
-    by_year = filters == "ticker+year"
+    by_year = _check(filters)
 
     def search(q: BenchmarkQuestion, limit: int) -> list[Hit]:
-        year = q.fiscal_year if by_year and q.question_type == "value_lookup" else None
+        ticker, year = _scope(q, filters, by_year)
+        text = expand_query(q) if expand else q.question
         return store.search(
-            embedder.embed_query(q.question),
-            sparse.embed_query(q.question),
-            limit=limit,
-            ticker=None if filters == "none" else q.ticker,
-            fiscal_year=year,
-            prefetch=prefetch,
+            embedder.embed_query(text), sparse.embed_query(text), limit=limit,
+            ticker=ticker, fiscal_year=year, prefetch=prefetch,
         )
+
+    return search
+
+
+HitSearch = Callable[[BenchmarkQuestion, int], Sequence[Hit]]
+"""A retriever that returns full `Hit`s. Reranking needs the chunk text, which
+the leaner `Retrieved` protocol used for scoring deliberately does not carry."""
+
+
+def reranked(
+    inner: HitSearch, reranker: Reranker, depth: int = 100, expand: bool = False
+) -> HitSearch:
+    """Reorder a shortlist from `inner` with a cross-encoder.
+
+    Composes over any retriever - dense, hybrid, expanded - because they are all
+    just a `SearchFn`. That is the payoff of injecting the retriever instead of
+    importing it.
+
+    `depth` is the shortlist size, and it is the whole game: recall@depth of the
+    inner retriever is a hard ceiling here, since reordering cannot introduce a
+    chunk that was never fetched.
+    """
+
+    def search(q: BenchmarkQuestion, limit: int) -> list[Hit]:
+        n = max(depth, limit)
+        candidates = inner(q, n)
+        if not candidates:
+            return []
+        text = expand_query(q) if expand else q.question
+        scores = reranker.scores(text, [h.text for h in candidates])
+        order = sorted(range(len(candidates)), key=lambda i: scores[i], reverse=True)
+        return [candidates[i] for i in order[:limit]]
 
     return search
