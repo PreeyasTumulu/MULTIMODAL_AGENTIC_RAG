@@ -53,6 +53,9 @@ class VectorStore:
         self.collection = collection
         self.dim = dim
 
+    def exists(self) -> bool:
+        return bool(self.client.collection_exists(self.collection))
+
     def recreate(self) -> None:
         if self.client.collection_exists(self.collection):
             self.client.delete_collection(self.collection)

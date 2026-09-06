@@ -7,6 +7,46 @@ Notable changes per development day. Format loosely follows
 
 ## [Unreleased]
 
+### Added — the run ledger: measurements became records
+
+Every metric this project had produced lived inside a notebook output cell. Fine
+for one number, useless for a comparison: answering *"did hybrid beat dense, and
+by how much"* meant re-running both. A claim you cannot diff is a claim you
+cannot defend.
+
+A run is now a **record**. `analyst.evaluation` writes each one to
+`results/runs.jsonl` carrying the config that produced it, a content hash of the
+benchmark it scored, and the git revision of the code — suffixed `-dirty` when
+the tree was uncommitted, because that run is not reproducible and saying so
+costs nothing. `results/leaderboard.md` regenerates from the ledger.
+
+`results/` is committed, unlike `data/`. The corpus is reproducible from the
+manifest; a measurement is not reproducible without the compute that made it.
+
+- **The retriever is injected, not imported.** `evaluate()` takes a callable, so
+  dense, hybrid and reranked retrieval are scored by identical code on identical
+  questions — which is the only reason a delta means anything. It also lets the
+  13 new tests run with a fake retriever, no Qdrant and no embeddings.
+- `analyst.retrievers` holds one factory per strategy. Day 4's hybrid and
+  reranked retrievers land beside `dense` without touching the scoring code.
+- Notebook 07 now sweeps **one collection per model** and is **resumable** — a
+  collection already at full point count is skipped, so a two-hour sweep does
+  not restart from zero after one failure.
+- Notebook 08 scores from the package instead of a notebook-local `evaluate()`,
+  and the depth curve is finally reproducible code rather than prose in this file.
+- [ADR-006](adr/0006-embedding-model.md) — **Proposed**, with the decision rule
+  fixed *before* the sweep runs: highest Recall@5 wins, ties inside 0.02 go to
+  the smaller model. The expectation is recorded too: given that 32 of 44
+  questions have no correct element in the top 200, a bigger model in the same
+  family is predicted to move little. Being wrong about that would be the
+  interesting outcome.
+
+Checks: **50 tests** (was 37), `ruff` clean, `mypy --strict` clean on 28 files.
+
+> ⚠ Rewriting notebook 08 onto the ledger cleared its saved outputs, and two of
+> notebook 07's. Both need one execution pass once the sweep has run; until then
+> the only recorded numbers for Day 3 are the tables in this file.
+
 ### The Day 3 baseline — dense retrieval, and it is bad
 
 The index is complete: `elements_bge-small` holds **9,982 of 9,982 points**,
@@ -79,8 +119,8 @@ shrank 36% and notebook 08 48%, all of it noise.
 1. **Day 4**: hybrid sparse + dense, then the cross-encoder reranker, then re-run
    notebook 08. The delta is the deliverable, not the technique.
 2. Execute notebooks 01–05 and 10 so they ship **with outputs** (06–09 have them).
-3. ADR-006 (embedding model): index `bge-base` as a second collection and compare
-   on the same 44 questions. Do not pick a model by reputation.
+3. Run the ADR-006 sweep (notebook 07 with `SWEEP = list(MODELS)`), then flip
+   that ADR to Accepted with the winning row.
 4. Flip the ✅/🔜 markers in `docs/`, regenerate `data/schema.md` via notebook 10.
 
 ### Open, not blocking

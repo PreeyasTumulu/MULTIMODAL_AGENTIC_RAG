@@ -44,6 +44,7 @@ If you find one, that is a bug.
 | File | Regenerate with |
 |---|---|
 | [`data/schema.md`](data/schema.md) | run [`notebooks/10_generate_docs.ipynb`](../notebooks/10_generate_docs.ipynb) |
+| [`results/leaderboard.md`](../results/leaderboard.md) | run [`notebooks/08_evaluate_retrieval.ipynb`](../notebooks/08_evaluate_retrieval.ipynb) |
 
 **Written docs — update when the matching thing changes:**
 
@@ -56,6 +57,7 @@ If you find one, that is a bug.
 | where something is stored | [architecture/storage.md](architecture/storage.md) |
 | an API route or schema | [architecture/api.md](architecture/api.md) |
 | a command needed to run the system | [operations/runbook.md](operations/runbook.md) |
+| a retriever, an embedding model, or the benchmark | re-run notebook 08; the ledger appends |
 | **any significant technical choice** | **write a new [ADR](adr/)** |
 
 **Every phase ends with:** regenerate `schema.md`, flip the affected ✅/🔜
