@@ -22,14 +22,17 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from analyst.benchmark import BenchmarkQuestion
+from analyst.config import ROOT
 
 K_VALUES: tuple[int, ...] = (1, 3, 5, 10)
 # Where this curve flattens is the ceiling for anything that only *reorders*
 # results - a cross-encoder reranker included.
 DEPTHS: tuple[int, ...] = (1, 5, 10, 20, 50, 100, 200)
 
-LEDGER = Path("results") / "runs.jsonl"
-LEADERBOARD = Path("results") / "leaderboard.md"
+# Repo-root anchored: a headless notebook runs with CWD=notebooks/, and a
+# ledger that moves with the CWD is not a ledger.
+LEDGER = ROOT / "results" / "runs.jsonl"
+LEADERBOARD = ROOT / "results" / "leaderboard.md"
 
 
 class Retrieved(Protocol):
@@ -67,8 +70,9 @@ class RunConfig(_Frozen):
 
     retriever: str  # "dense" | "hybrid" | "dense+rerank"
     model: str  # key from analyst.embedding.MODELS
-    use_filters: bool
+    filters: str  # see analyst.retrievers.FILTERS - a bool could not tell three apart
     limit: int
+    points: int = 0  # index size scored; a partial index must not look complete
     notes: str = ""
 
 
@@ -93,9 +97,10 @@ class Run(_Frozen):
         """One flat row for a DataFrame."""
         return {
             "run": self.run_id, "retriever": self.config.retriever,
-            "model": self.config.model, "filters": self.config.use_filters,
+            "model": self.config.model, "filters": self.config.filters,
             **{f"R@{k}": v for k, v in sorted(self.metrics.recall_at.items())},
             "MRR": self.metrics.mrr, "pR@5": self.metrics.page_recall_at_5,
+            "points": self.config.points,
             "p50_ms": self.metrics.p50_ms, "bench": self.bench_sha[:8],
             "git": self.git_rev,
         }
@@ -216,7 +221,7 @@ def render_leaderboard(runs: Sequence[Run], ks: Sequence[int] = K_VALUES) -> str
     head = ["run", "retriever", "model", "filters", *[f"R@{k}" for k in ks],
             "MRR", "pR@5", "p50 ms", "bench", "git"]
     body = [[r.run_id, r.config.retriever, f"`{r.config.model}`",
-             "yes" if r.config.use_filters else "no",
+             f"`{r.config.filters}`",
              *[f"{r.metrics.recall_at.get(k, 0.0):.3f}" for k in ks],
              f"{r.metrics.mrr:.3f}", f"{r.metrics.page_recall_at_5:.3f}",
              f"{r.metrics.p50_ms:.0f}", f"`{r.bench_sha[:8]}`", f"`{r.git_rev}`"]

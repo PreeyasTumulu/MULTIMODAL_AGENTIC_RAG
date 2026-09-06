@@ -26,9 +26,12 @@ manifest; a measurement is not reproducible without the compute that made it.
 - **The retriever is injected, not imported.** `evaluate()` takes a callable, so
   dense, hybrid and reranked retrieval are scored by identical code on identical
   questions — which is the only reason a delta means anything. It also lets the
-  13 new tests run with a fake retriever, no Qdrant and no embeddings.
+  evaluation tests run with a fake retriever, no Qdrant and no embeddings.
 - `analyst.retrievers` holds one factory per strategy. Day 4's hybrid and
   reranked retrievers land beside `dense` without touching the scoring code.
+- **`RunConfig.filters` is a string, not a bool.** Three policies that differ by
+  0.16 recall at depth would otherwise have recorded as the same run, which
+  would have made the ledger confidently wrong rather than merely incomplete.
 - Notebook 07 now sweeps **one collection per model** and is **resumable** — a
   collection already at full point count is skipped, so a two-hour sweep does
   not restart from zero after one failure.
@@ -36,16 +39,46 @@ manifest; a measurement is not reproducible without the compute that made it.
   and the depth curve is finally reproducible code rather than prose in this file.
 - [ADR-006](adr/0006-embedding-model.md) — **Proposed**, with the decision rule
   fixed *before* the sweep runs: highest Recall@5 wins, ties inside 0.02 go to
-  the smaller model. The expectation is recorded too: given that 32 of 44
+  the smaller model. The expectation is recorded too: given that 25 of 44
   questions have no correct element in the top 200, a bigger model in the same
   family is predicted to move little. Being wrong about that would be the
   interesting outcome.
 
-Checks: **50 tests** (was 37), `ruff` clean, `mypy --strict` clean on 28 files.
+Checks: **63 tests** (was 37), `ruff` clean, `mypy --strict` clean on 29 files.
 
 > ⚠ Rewriting notebook 08 onto the ledger cleared its saved outputs, and two of
 > notebook 07's. Both need one execution pass once the sweep has run; until then
 > the only recorded numbers for Day 3 are the tables in this file.
+
+### Added — hybrid retrieval (built and tested, **not yet measured**)
+
+The Day 4 lever, in code. No number is claimed for it yet: the collection has
+not been built, so nothing below is a result.
+
+- `analyst.embedding.SparseEmbedder` — BM25 via fastembed's `Qdrant/bm25`.
+  **Statistical, not neural**: 10 MB, no ONNX session, runs on the GPU-less
+  deploy target. `520,412.5` and `438,860.1` are near-identical to a dense
+  encoder and completely different tokens to BM25, which is the whole argument.
+- `analyst.vectorstore.HybridStore` — named `dense` + `sparse` vectors, fused
+  **server-side by RRF** in a single query. RRF combines the two rankings by
+  *position*: a cosine score and a BM25 score are not on the same scale, and
+  normalising them is a fudge with a tuning knob attached.
+- A **separate** `elements_hybrid_<model>` collection. Qdrant fixes a
+  collection's vector layout at creation, so hybrid cannot be added to the
+  existing dense ones without destroying them — and those are ADR-006's evidence.
+- `analyst.retrievers.hybrid` takes the same filter policies as `dense`, so the
+  two are directly comparable in the ledger.
+- Notebook 11 indexes, scores, and prints the delta against the dense baseline
+  read back from `results/runs.jsonl`.
+
+Shared store logic (payload, point IDs, filters, hit parsing) moved to
+module-level helpers rather than being duplicated across the two classes.
+
+### Fixed — a stale throughput number in the source
+
+`embedding.py` still documented `parallel=8` at **8.7 chunks/sec**. Two careful
+re-measurements put it at **6.2-6.3**; the 8.7 came from a short, badly sampled
+window. The docstring now says 6.2 and explains why the first number was wrong.
 
 ### The Day 3 baseline — dense retrieval, and it is bad
 
@@ -80,25 +113,50 @@ retriever, so it was checked three ways before being recorded:
 
 The baseline is real.
 
-### The measurement that reorders Day 4
+### The measurement that decides Day 4 — corrected
 
-Rank of the correct element, searching to depth 200:
+Rank of the correct element, searching to depth 200. **The filter policy moves
+this curve more than anything else measured so far**, and the first reading of it
+compared the wrong pair: the curve was measured *without* metadata filters while
+the headline table above it is the *filtered* configuration. Two different
+retrievers, one conclusion.
 
-| depth | 5 | 10 | 20 | 50 | 100 | 200 |
+| policy | 5 | 10 | 20 | 50 | 100 | 200 |
 |---|---|---|---|---|---|---|
-| recall | 0.045 | 0.091 | 0.136 | 0.182 | 0.273 | 0.273 |
+| `none` — no filters | 0.045 | 0.091 | 0.136 | 0.182 | 0.273 | 0.273 |
+| `ticker+year` — what the system uses | 0.045 | 0.091 | 0.136 | 0.227 | 0.273 | **0.432** |
 
-**32 of 44 questions have no correct element anywhere in the top 200.** A
-cross-encoder reranker only reorders what dense retrieval already surfaced, so on
-this corpus **a reranker is capped at 0.273 recall no matter how good it is.**
+The `none` row reproduces the originally recorded curve exactly, which is what
+identified the mix-up. Every policy measured so far is **identical at k<=20**, so
+the headline baseline is unaffected — they diverge only at depth, which is
+precisely where the ceiling argument lives.
 
-Day 4 therefore leads with **hybrid sparse + dense retrieval**, and adds the
-reranker second. These queries are numeric and entity-heavy — "net profit",
-"FY2025", "HDFC Bank" — which is what lexical matching catches and what dense
-embeddings blur across financial table rows that are mostly digits. Recall at
-depth has to move before reranking has anything to work with.
+**The corrected ceiling: 0.432, not 0.273.** 19 of 44 questions have their answer
+somewhere in the top 200, not 12; 25 have nothing there. A cross-encoder reranker
+only reorders what retrieval surfaced, so 0.432 is its hard cap — still low, but
+meaningfully less hopeless than recorded.
 
-> ⚠️ **Read the baseline with its caveat.** Ground truth is *single-anchor*: each
+**Day 4 still leads with hybrid sparse retrieval.** A 0.432 ceiling does not
+change the diagnosis: these queries are numeric and entity-heavy ("net profit",
+"FY2025", "HDFC Bank"), which is what lexical matching catches and what dense
+embeddings blur across table rows that are mostly digits. Recall at depth has to
+move before reranking has much to work with. The reranker is now worth doing
+*second* rather than not at all.
+
+> `ticker` alone is not in the table because it has not been measured. Notebook
+> 08 scores it; the row appears in `results/leaderboard.md` when it does.
+
+### A finding worth not acting on
+
+Forcing the year filter onto growth questions as well reaches **0.477**, beating
+the principled policy. It should not be adopted. A growth question's evidence
+spans two annual reports and scoring counts a hit on *either* anchor, so
+narrowing to one year surfaces that year's element in a smaller pool while the
+question — which needs both figures — remains unanswerable. That is the
+benchmark being lenient about multi-document questions, not retrieval improving.
+It is recorded here because the next person to see 0.477 will be tempted.
+
+> ⚠ **Read the baseline with its caveat.** Ground truth is *single-anchor*: each
 > question names one element that contains the answer. Retrieval that surfaces a
 > different page also stating the answer scores as a miss. True quality is better
 > than 0.045 — the metric is strict by construction. The Day 4 delta will be

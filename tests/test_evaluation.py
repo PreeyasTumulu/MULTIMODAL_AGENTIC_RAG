@@ -94,7 +94,7 @@ def test_empty_benchmark_does_not_divide_by_zero() -> None:
 
 
 def config(model: str = "bge-small") -> RunConfig:
-    return RunConfig(retriever="dense", model=model, use_filters=True, limit=10)
+    return RunConfig(retriever="dense", model=model, filters="ticker+year", limit=10)
 
 
 def test_run_survives_the_json_round_trip_with_int_keyed_dicts() -> None:
@@ -137,3 +137,36 @@ def test_leaderboard_is_ascii_and_ranks_best_first() -> None:
 
 def test_leaderboard_with_no_runs_says_so() -> None:
     assert "No runs recorded yet" in render_leaderboard([])
+
+
+def test_paths_anchor_to_the_repo_not_the_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A headless notebook runs with CWD=notebooks/. A ledger that moves with the
+    CWD is not a ledger - this is how a second data/ tree appeared under notebooks/."""
+    from analyst.config import ROOT, Settings
+    from analyst.evaluation import LEDGER
+
+    monkeypatch.chdir(tmp_path)
+    assert LEDGER == ROOT / "results" / "runs.jsonl"
+    assert Settings().data_dir == ROOT / "data"
+
+
+def test_unknown_filter_policy_is_rejected_not_silently_ignored() -> None:
+    """A typo'd policy must not record as a run that looks comparable."""
+    from analyst.retrievers import FILTERS, dense
+
+    assert "ticker+year" in FILTERS
+    with pytest.raises(ValueError, match="unknown filter policy"):
+        dense(None, None, "ticker+yr")  # type: ignore[arg-type]
+
+
+def test_a_partial_index_is_visible_in_the_run_record() -> None:
+    """A stopped sweep leaves a half-built collection that still answers queries.
+    The scored index size is recorded so such a run can never look complete."""
+    qs = [question()]
+    cfg = RunConfig(retriever="dense", model="bge-base", filters="ticker+year",
+                    limit=10, points=256)
+    run = build_run(cfg, evaluate(qs, searcher_placing_answer_at(1), 10), qs)
+    assert Run.model_validate_json(run.model_dump_json()).config.points == 256
+    assert run.row()["points"] == 256

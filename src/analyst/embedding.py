@@ -17,7 +17,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
 import numpy as np
-from fastembed import TextEmbedding
+from fastembed import SparseTextEmbedding, TextEmbedding
+from fastembed.sparse.sparse_embedding_base import SparseEmbedding
 
 
 @dataclass(frozen=True)
@@ -56,10 +57,12 @@ class Embedder:
     ) -> Iterator[np.ndarray]:
         """`parallel` is process-level data parallelism, and it is what matters.
 
-        Measured on this 16-thread machine: onnxruntime intra-op threads made no
-        difference (4.4 -> 4.1 chunks/sec), while parallel=8 doubled throughput
-        (4.4 -> 8.7). The model is small enough that one instance cannot saturate
-        the CPU, so more copies beat more threads per copy.
+        Measured on this 16-thread machine: onnxruntime intra-op threads made
+        things worse (4.3-4.5 -> 3.1-3.9 chunks/sec), while process-level
+        parallel=8 reached 6.2-6.3. The model is small enough that one instance
+        cannot saturate the CPU, so more copies beat more threads per copy.
+        (An early run recorded 8.7; two careful re-measurements said 6.2. Use
+        6.2 - the first number came from a short, badly sampled window.)
 
         Defaulted to 4 rather than 8: each worker loads its own copy of the model,
         and a run at parallel=8 died partway through a 9,982-chunk index on a
@@ -69,4 +72,32 @@ class Embedder:
 
     def embed_query(self, text: str) -> np.ndarray:
         """Single query vector, with the model's query-side instruction prefix."""
+        return next(iter(self._model.query_embed([text])))
+
+
+# BM25 is statistical, not neural: 10 MB, no ONNX session, and it runs anywhere
+# the deployment target can run Python. That matters because the AWS free-tier
+# box has no GPU.
+SPARSE_MODEL = "Qdrant/bm25"
+
+
+class SparseEmbedder:
+    """Lexical term weights, the half dense retrieval is systematically bad at.
+
+    The Day 3 failure is numeric table rows collapsing together in embedding
+    space: "520,412.5" and "438,860.1" are near-identical to a dense encoder and
+    entirely different tokens to BM25. This is the Day 4 lever.
+    """
+
+    def __init__(self, name: str = SPARSE_MODEL) -> None:
+        self._model = SparseTextEmbedding(model_name=name)
+
+    def embed_documents(
+        self, texts: Iterable[str], batch_size: int = 64, parallel: int = 4
+    ) -> Iterator[SparseEmbedding]:
+        yield from self._model.embed(texts, batch_size=batch_size, parallel=parallel)
+
+    def embed_query(self, text: str) -> SparseEmbedding:
+        """BM25 scores a query without document term frequencies, so the query
+        side genuinely differs from the document side - same asymmetry as BGE."""
         return next(iter(self._model.query_embed([text])))

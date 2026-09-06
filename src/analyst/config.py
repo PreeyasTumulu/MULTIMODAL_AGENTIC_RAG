@@ -6,8 +6,13 @@ One source of truth. Nothing in this project reads os.environ directly.
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# src/analyst/config.py -> repo root. Notebooks run under nbconvert with
+# CWD=notebooks/, so a bare relative path silently makes a SECOND copy of the
+# tree (this is how notebooks/data/benchmark/ came to exist). Anchor instead.
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -37,6 +42,12 @@ class Settings(BaseSettings):
     # --- paths / misc
     data_dir: Path = Path("data")
     log_level: str = "INFO"
+
+    @field_validator("data_dir")
+    @classmethod
+    def _anchor_to_root(cls, v: Path) -> Path:
+        """A relative data_dir means "relative to the repo", never to the CWD."""
+        return v if v.is_absolute() else ROOT / v
 
     @property
     def database_url(self) -> str:

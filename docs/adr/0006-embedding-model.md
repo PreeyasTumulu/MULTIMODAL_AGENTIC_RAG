@@ -27,7 +27,9 @@ Runs append to `results/runs.jsonl` and the table regenerates into
 The Day 3 depth curve is the reason to keep expectations low, and to run the
 sweep anyway.
 
-**32 of 44 questions have no correct element anywhere in the top 200.** The
+**25 of 44 questions have no correct element anywhere in the top 200** (recall
+0.432 at depth, corrected — the figure first recorded, 0.273, came from an
+unfiltered run compared against a filtered headline; see the CHANGELOG). The
 failure is not ranking; it is that near-identical numeric table rows collapse
 together in embedding space. A larger model in the same family reshuffles ranks
 — it does not obviously fix that. So this sweep is expected to produce a *small*

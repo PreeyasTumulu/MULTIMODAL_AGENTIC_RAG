@@ -16,9 +16,10 @@ The pipeline, in order, as runnable notebooks that **show their output**.
 | 08 | [Evaluate retrieval](08_evaluate_retrieval.ipynb) | Recall@k, MRR — appends to **`results/runs.jsonl`** | ~2 min |
 | 09 | [Explore the corpus](09_explore_corpus.ipynb) | Read-only. Run any time | seconds |
 | 10 | [Regenerate schema docs](10_generate_docs.ipynb) | Rewrites `docs/data/schema.md` | seconds |
+| 11 | [Hybrid retrieval](11_hybrid_retrieval.ipynb) | BM25 + dense, fused by RRF — **the Day 4 lever** | ~35 min |
 
 01–08 are a dependency chain: each needs the ones before it to have run at least
-once. 09 and 10 are safe at any point.
+once. 11 needs 01–06. 09 and 10 are safe at any point.
 
 Everything is **idempotent** — re-running never duplicates data.
 

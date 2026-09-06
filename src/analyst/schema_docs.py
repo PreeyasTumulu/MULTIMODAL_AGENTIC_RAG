@@ -13,10 +13,11 @@ from pathlib import Path
 from sqlalchemy import Table, UniqueConstraint, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from analyst.config import ROOT
 from analyst.db import session_scope
 from analyst.models import Base
 
-OUT = Path("docs/data/schema.md")
+OUT = ROOT / "docs" / "data" / "schema.md"  # not CWD-relative: notebooks run elsewhere
 
 # One line each, explaining what the table is FOR - the part metadata cannot say.
 PURPOSE: dict[str, str] = {
