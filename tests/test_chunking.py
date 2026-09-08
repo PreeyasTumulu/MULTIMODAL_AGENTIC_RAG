@@ -209,3 +209,25 @@ def test_the_prefix_is_charged_against_the_chunk_budget() -> None:
     # Same content, more chunks, because each one now carries the prefix too.
     without = chunk_document([_el(0, "table", "x", table=table)], "SUNPHARMA", 2024)
     assert len(with_ctx) >= len(without)
+
+
+def test_furniture_stripping_is_independent_of_the_context_prefix() -> None:
+    """The ADR-008 `strip` arm: furniture removed, no prefix.
+
+    The first run tied these two together, so a +0.25 R@5 could not be assigned
+    to either. They have to be separately switchable to be separately measured.
+    """
+    els = [
+        _el(0, "heading", "226\nStatutory Reports\nCorporate Overview\nFinancial Statements"),
+        _el(1, "text", "Body content here. " * 6),
+    ]
+    strip_only = chunk_document(els, "X", 2025, context=None, strip_furniture=True)[0]
+    assert strip_only.heading is None          # furniture gone
+    assert strip_only.context == ""            # but no prefix added
+    assert strip_only.embed_text == strip_only.text
+
+    prefix_only = chunk_document(els, "SUNPHARMA", 2024, context=_ctx(),
+                                 strip_furniture=False)[0]
+    assert prefix_only.heading is not None     # furniture kept
+    assert "Statutory Reports" in prefix_only.text
+    assert "Sun Pharmaceutical Industries" in prefix_only.embed_text

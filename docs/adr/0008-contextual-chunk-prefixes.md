@@ -31,6 +31,12 @@ The heading slot is not empty — it is occupied by something worse than empty.
 **Prefix every chunk with the company and fiscal year, in both vocabularies.
 Strip page-furniture headings. Do not attempt to recover statement titles.**
 
+⚠️ Of those three, only the prefix earned its place on the numbers. Furniture
+stripping measured at zero (see Attribution) and is retained because it is built,
+tested, and part of the configuration that was actually measured — not because it
+paid for itself. **The +0.273 is measured on top of stripping; a prefix-only arm
+was never run**, so "the prefix alone reproduces `ctx`" is likely but unproven.
+
 `analyst.chunking.DocContext.prefix`:
 
 ```
@@ -106,12 +112,14 @@ Three arms, `bge-small`, `ticker+year`, query expansion on everywhere, the same
 |---|---|---|---|
 | `elements_bge-small` (ADR-007) | no | no | no |
 | `fix` | yes | no | no |
+| `strip` | yes | yes | no |
 | `ctx` | yes | yes | yes |
 
 | retriever | R@1 | R@5 | R@10 | MRR | @50 | @100 | **@200** | p50 |
 |---|---|---|---|---|---|---|---|---|
 | dense+expand (ADR-007) | 0.045 | 0.068 | 0.114 | 0.056 | 0.364 | 0.477 | 0.682 | 88 ms |
-| dense+expand `[fix]` | 0.045 | 0.068 | 0.114 | 0.056 | 0.364 | 0.455 | 0.682 | 94 ms |
+| dense+expand `[fix]` | 0.045 | 0.068 | 0.114 | 0.056 | 0.364 | 0.455 | 0.682 | 90 ms |
+| dense+expand `[strip]` | 0.045 | 0.045 | 0.091 | 0.050 | 0.409 | 0.523 | 0.727 | 90 ms |
 | **dense+expand `[ctx]`** | **0.182** | **0.318** | **0.455** | **0.243** | 0.795 | 0.841 | **1.000** | 101 ms |
 | hybrid+expand (ADR-007) | 0.045 | 0.068 | 0.091 | 0.054 | 0.477 | 0.614 | 0.727 | 91 ms |
 | hybrid+expand `[fix]` | 0.045 | 0.068 | 0.091 | 0.054 | 0.455 | 0.614 | 0.727 | 99 ms |
@@ -130,33 +138,45 @@ Note dense now beats hybrid at depth (1.000 vs 0.977) and on MRR, reversing
 ADR-007. RRF at a fixed cut can still drop a deep dense hit, and with the pool
 this good that costs more than the lexical half adds.
 
-### Why it worked — not the reason ADR-007 assumed
+### Attribution: it is the prefix, and only the prefix
 
-ADR-007 expected the prefix to *add* a matching signal. What actually dominated
-is that furniture stripping *removed a distractor*. The canonical question,
-top 5, before and after:
+The first run changed two things at once, so a `strip` arm was added — furniture
+removed, no prefix — to split the credit. Dense, `ticker+year`, expansion on:
+
+| step | R@5 | MRR | @200 |
+|---|---|---|---|
+| furniture stripping (`fix` -> `strip`) | **-0.023** | -0.006 | +0.045 |
+| context prefix (`strip` -> `ctx`) | **+0.273** | +0.193 | +0.273 |
+
+**Stripping page furniture is worth nothing** — marginally negative at R@5,
+marginally positive at depth. Essentially the whole gain is the prefix.
+
+That contradicts the reading taken from the first run, which is worth recording
+because the wrong reading was persuasive. The `fix` arm's top 5 for the canonical
+question were *all* furniture-headed chunks scoring ~0.83:
 
 ```
 fix : 0.832  Consolidated Statement of Cash Flow | for the year ended March 31, 2024 | Sun Pharmaceutical Indus...
-      0.831  for the year ended March 31, 2024 | 6 | 541.8 | ... Sun Pharmaceutical Industries (Aus...
       0.823  Notes to the Consolidated Financial Statements | for the year ended March 31, 2024 | Sun Pharmaceu...
 
-ctx : 0.936  | Year ended | March 31, 2024 | Year ended | March 31, 2023 | Revenue from contracts with customers   <== CORRECT
+ctx : 0.936  | Year ended | March 31, 2024 | ... | Revenue from contracts with customers   <== CORRECT
 ```
 
-`expand_query` appends the company name and `year ended March 31, <fy>`. Those
-are exactly the words printed in the running page bands — so the furniture was
-manufacturing high-scoring false positives on hundreds of irrelevant pages, and
-the more the query was expanded the better the furniture scored. **Query
-expansion and page furniture were interacting badly, and ADR-007's headline gain
-was being suppressed by it.**
+`expand_query` appends the company name and `year ended March 31, <fy>`, which is
+exactly what the page bands print — so furniture looked like an obvious
+distractor being amplified by expansion. It is a clean story and it is wrong:
+removing the furniture alone simply swapped those false positives for different
+ones. **A qualitative look at the top-5 identified a real phenomenon and
+misattributed the cause; only the third arm settled it.**
 
-⚠️ **This experiment does not separate the two changes.** `ctx` strips furniture
-*and* adds the prefix; there is no arm with one and not the other. The evidence
-above points strongly at stripping, but pointing strongly is not measuring. A
-`strip` arm (furniture removed, no prefix) would settle it and costs one
-dense re-index (~25 min). **Until that runs, the honest claim is "the pair is
-worth +0.25 R@5", not "the prefix is."**
+**The mechanism behind the prefix is not established.** It cannot be a simple
+"adds a matching signal" story, because under `ticker+year` every candidate is
+already one company and one document-year, so the prefix is constant across the
+pool. A plausible account is that cosine similarity is normalised, so a fixed
+prefix perturbs a short numeric table chunk far more than a long prose one, and
+the encoder's near-degenerate representations of bare number grids get pushed
+somewhere more separable. **That is a hypothesis, not a finding** — the honest
+statement is that the prefix is worth +0.273 R@5 and why is unmeasured.
 
 ## Tradeoffs
 

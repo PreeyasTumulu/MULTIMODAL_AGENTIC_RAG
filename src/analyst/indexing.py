@@ -15,12 +15,18 @@ from analyst.db import session_scope
 from analyst.models import Company, Document, ElementRow
 
 
-def load_chunks(with_context: bool = False) -> list[Chunk]:
-    """Every document, chunked. `with_context` is the ADR-008 arm.
+def load_chunks(
+    with_context: bool = False, strip_furniture: bool | None = None
+) -> list[Chunk]:
+    """Every document, chunked.
 
-    The two arms differ in exactly two ways - the prefix and the page-furniture
-    filter - and in nothing else, so a delta between them is attributable.
+    The two treatments are separately controllable because ADR-008's first run
+    could not tell them apart: its `ctx` arm stripped furniture AND added a
+    prefix, so a +0.25 R@5 could not be assigned to either. `strip_furniture`
+    defaults to following `with_context`, which reproduces the original `fix`
+    and `ctx` arms exactly, and can be set independently for the `strip` arm.
     """
+    strip = with_context if strip_furniture is None else strip_furniture
     out: list[Chunk] = []
     with session_scope() as s:
         for d in s.execute(select(Document).order_by(Document.ticker)).scalars().all():
@@ -40,5 +46,5 @@ def load_chunks(with_context: bool = False) -> list[Chunk]:
                 if with_context else None
             )
             out.extend(chunk_document(els, d.ticker, d.fiscal_year, context=ctx,
-                                      strip_furniture=with_context))
+                                      strip_furniture=strip))
     return out
