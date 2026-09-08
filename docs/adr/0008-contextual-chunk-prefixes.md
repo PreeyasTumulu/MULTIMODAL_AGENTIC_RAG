@@ -1,6 +1,6 @@
 # ADR-008: Contextual chunk prefixes — the document side of the vocabulary gap
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-08
 - **Follows** [ADR-007](0007-retrieval-strategy.md), which fixed the *question*
   side of the vocabulary gap and named this as the next lever
@@ -99,24 +99,76 @@ prefix is not credited with un-truncating 136 chunks.
 
 ## Results
 
+Three arms, `bge-small`, `ticker+year`, query expansion on everywhere, the same
+44 questions (`bench_sha 2c4aedf3dcb75f7e` on all six runs):
+
 | arm | budget fix | furniture stripped | context prefix |
 |---|---|---|---|
 | `elements_bge-small` (ADR-007) | no | no | no |
 | `fix` | yes | no | no |
 | `ctx` | yes | yes | yes |
 
-_Numbers pending the indexing run; this ADR stays **Proposed** until they land._
+| retriever | R@1 | R@5 | R@10 | MRR | @50 | @100 | **@200** | p50 |
+|---|---|---|---|---|---|---|---|---|
+| dense+expand (ADR-007) | 0.045 | 0.068 | 0.114 | 0.056 | 0.364 | 0.477 | 0.682 | 88 ms |
+| dense+expand `[fix]` | 0.045 | 0.068 | 0.114 | 0.056 | 0.364 | 0.455 | 0.682 | 94 ms |
+| **dense+expand `[ctx]`** | **0.182** | **0.318** | **0.455** | **0.243** | 0.795 | 0.841 | **1.000** | 101 ms |
+| hybrid+expand (ADR-007) | 0.045 | 0.068 | 0.091 | 0.054 | 0.477 | 0.614 | 0.727 | 91 ms |
+| hybrid+expand `[fix]` | 0.045 | 0.068 | 0.091 | 0.054 | 0.455 | 0.614 | 0.727 | 99 ms |
+| hybrid+expand `[ctx]` | 0.159 | 0.341 | 0.409 | 0.229 | 0.795 | 0.864 | 0.977 | 99 ms |
+
+**The control arm did its job and reported nothing.** `fix` is identical to
+ADR-007 on every headline metric — the encoder-budget bug was real, but fixing
+160 truncated chunks moved no number. That is what makes the rest attributable.
+
+**`ctx` is the largest movement measured in this project.** R@5 0.068 -> 0.318,
+MRR 0.056 -> 0.243, and **recall at depth 200 reaches 1.000** — every one of the
+44 answer elements is now retrieved. Growth questions, unsolved since Day 4, go
+**5/10 -> 10/10**; value lookups 33/34.
+
+Note dense now beats hybrid at depth (1.000 vs 0.977) and on MRR, reversing
+ADR-007. RRF at a fixed cut can still drop a deep dense hit, and with the pool
+this good that costs more than the lexical half adds.
+
+### Why it worked — not the reason ADR-007 assumed
+
+ADR-007 expected the prefix to *add* a matching signal. What actually dominated
+is that furniture stripping *removed a distractor*. The canonical question,
+top 5, before and after:
+
+```
+fix : 0.832  Consolidated Statement of Cash Flow | for the year ended March 31, 2024 | Sun Pharmaceutical Indus...
+      0.831  for the year ended March 31, 2024 | 6 | 541.8 | ... Sun Pharmaceutical Industries (Aus...
+      0.823  Notes to the Consolidated Financial Statements | for the year ended March 31, 2024 | Sun Pharmaceu...
+
+ctx : 0.936  | Year ended | March 31, 2024 | Year ended | March 31, 2023 | Revenue from contracts with customers   <== CORRECT
+```
+
+`expand_query` appends the company name and `year ended March 31, <fy>`. Those
+are exactly the words printed in the running page bands — so the furniture was
+manufacturing high-scoring false positives on hundreds of irrelevant pages, and
+the more the query was expanded the better the furniture scored. **Query
+expansion and page furniture were interacting badly, and ADR-007's headline gain
+was being suppressed by it.**
+
+⚠️ **This experiment does not separate the two changes.** `ctx` strips furniture
+*and* adds the prefix; there is no arm with one and not the other. The evidence
+above points strongly at stripping, but pointing strongly is not measuring. A
+`strip` arm (furniture removed, no prefix) would settle it and costs one
+dense re-index (~25 min). **Until that runs, the honest claim is "the pair is
+worth +0.25 R@5", not "the prefix is."**
 
 ## Tradeoffs
 
-- **Accepted — the prefix is constant within a filtered pool.** Under the default
-  `ticker+year` policy the candidate set is already scoped to one company and one
-  document-year, so the prefix adds the same string to every candidate and cannot
-  discriminate between them. Its upside is concentrated where the filter is not
-  doing that work: growth questions (which are deliberately not year-filtered)
-  and any production query arriving without metadata. **There is a real
-  possibility this measures flat or slightly negative at `ticker+year`, and that
-  is a result, not a failure of the experiment.**
+- **A prediction recorded here before the run was wrong.** It argued that under
+  `ticker+year` the pool is already one company and one document-year, so a
+  constant prefix cannot discriminate and the result would likely be "flat or
+  slightly negative". The reasoning about the prefix was sound as far as it went;
+  it missed that the other half of the change — stripping furniture — is *not*
+  constant across the pool, and that it removes an active distractor rather than
+  adding a signal. The measured jump is the largest in the project.
+  **This is the second time on this project that predicting the mechanism went
+  wrong while measuring it went right** (see ADR-007 on BM25 and reranking).
 - **Accepted — dropping headings loses real titles too.** The furniture filter is
   a line-anchored allowlist-by-exclusion, not a classifier. It is tuned to be
   conservative, but it will occasionally drop a genuine one-word section title.
