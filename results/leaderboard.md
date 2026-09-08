@@ -12,6 +12,8 @@ Generated from `results/runs.jsonl` by `analyst.evaluation`. Never edit by hand.
 | hybrid+expand[ctx]-bge-small-21b256e5 | hybrid+expand[ctx] | `bge-small` | `ticker+year` | 0.114 | 0.273 | 0.341 | 0.409 | 0.209 | 0.364 | 90 | `2c4aedf3` | `a715497-dirty` |
 | dense+expand[ctx]-bge-small-1ba71392 | dense+expand[ctx] | `bge-small` | `ticker+year` | 0.182 | 0.227 | 0.318 | 0.455 | 0.243 | 0.364 | 101 | `2c4aedf3` | `917bfe7-dirty` |
 | dense+expand[ctx]-bge-small-f1b65882 | dense+expand[ctx] | `bge-small` | `ticker+year` | 0.182 | 0.227 | 0.318 | 0.455 | 0.243 | 0.364 | 92 | `2c4aedf3` | `a715497-dirty` |
+| dense+expand[ctx]+rerank-bge-small-6799aab1 | dense+expand[ctx]+rerank | `bge-small` | `ticker+year` | 0.023 | 0.091 | 0.204 | 0.341 | 0.097 | 0.295 | 4029 | `2c4aedf3` | `9d37a2d-dirty` |
+| hybrid+expand[ctx]+rerank-bge-small-a67f09eb | hybrid+expand[ctx]+rerank | `bge-small` | `ticker+year` | 0.023 | 0.068 | 0.114 | 0.182 | 0.061 | 0.159 | 3814 | `2c4aedf3` | `9d37a2d-dirty` |
 | dense-bge-base-b8c50be6 | dense | `bge-base` | `ticker+year` | 0.000 | 0.045 | 0.091 | 0.114 | 0.030 | 0.159 | 396 | `2c4aedf3` | `3e65907-dirty` |
 | dense+expand+rerank-bge-small-b261fe8f | dense+expand+rerank | `bge-small` | `ticker+year` | 0.023 | 0.068 | 0.091 | 0.091 | 0.046 | 0.136 | 5314 | `2c4aedf3` | `2f3c9a3-dirty` |
 | hybrid+expand+rerank-bge-small-51aef45a | hybrid+expand+rerank | `bge-small` | `ticker+year` | 0.023 | 0.068 | 0.091 | 0.091 | 0.046 | 0.136 | 5381 | `2c4aedf3` | `2f3c9a3-dirty` |

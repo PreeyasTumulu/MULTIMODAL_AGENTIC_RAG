@@ -69,6 +69,40 @@ The cause is domain, not capability: `ms-marco-MiniLM-L-6-v2` is trained on
 MS MARCO web prose, and our passages are grids of numbers. A general reranker
 has nothing useful to say about `| Year ended | March 31, 2024 | 477,584.5 |`.
 
+### Re-measured after ADR-008 — the decision holds, and hardens
+
+This rejection was made when recall@100 was 0.477, and the stated reason to
+revisit it was that a cross-encoder is capped by recall at the shortlist depth.
+[ADR-008](0008-contextual-chunk-prefixes.md) moved recall@100 to 0.841, so the
+reranker was re-run on that index (`notebooks/13_reranking.ipynb`, depth 100):
+
+| inner retriever | R@5 | R@10 | MRR |
+|---|---|---|---|
+| dense+expand (this ADR) | 0.068 -> 0.091 **(+0.023)** | 0.114 -> 0.091 (-0.023) | 0.056 -> 0.046 |
+| hybrid+expand (this ADR) | 0.068 -> 0.091 **(+0.023)** | 0.091 -> 0.091 (0.000) | 0.054 -> 0.046 |
+| dense+expand `[ctx]` | 0.318 -> 0.204 **(-0.114)** | 0.455 -> 0.341 (-0.114) | 0.243 -> 0.097 |
+| hybrid+expand `[ctx]` | 0.341 -> 0.114 **(-0.227)** | 0.409 -> 0.182 (-0.227) | 0.209 -> 0.061 |
+
+**A better pool made the reranker worse, not better.** The hypothesis behind
+re-testing — raise the ceiling and the reranker starts paying — was wrong.
+
+The reason is visible in the reranked column alone: 0.091, 0.091, 0.204, 0.114
+at R@5 and 0.046, 0.046, 0.097, 0.061 at MRR. **The reranked result barely
+depends on what it was given.** A cross-encoder does not refine an ordering, it
+*replaces* it, so what it is worth is `reranker quality - retriever quality`.
+Against near-random retrieval its own noise was roughly break-even; against a
+retriever that now works it destroys real signal, costing up to ten questions
+at R@5 and more than half the MRR.
+
+**Recall at shortlist depth was never the binding constraint — the reranker's own
+domain competence was.** That reframes the open option below: `bge-reranker-base`
+is not "the same idea but bigger", it is a bet on the one variable that actually
+matters, and a general-purpose reranker of any size is the thing in doubt.
+
+(Latency also improved, 5,314 ms -> 4,029 ms, because ADR-008's chunks are
+shorter on average. Still ~44x un-reranked, and still irrelevant given the
+accuracy went backwards.)
+
 ## Alternatives considered
 
 | Option | Verdict |
