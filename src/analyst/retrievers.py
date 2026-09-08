@@ -21,37 +21,46 @@ from analyst.vectorstore import Hit, HybridStore, VectorStore
 FILTERS = ("none", "ticker", "ticker+year")
 
 
-def collection_for(prefix: str, model: str) -> str:
-    """One naming rule, so 07 (index) and 08 (evaluate) cannot disagree."""
-    return f"{prefix}_{model}"
+def collection_for(prefix: str, model: str, variant: str = "") -> str:
+    """One naming rule, so 07 (index) and 08 (evaluate) cannot disagree.
+
+    `variant` names an alternative build of the same corpus - ADR-008's `ctx`
+    and `fix` arms. Empty by default, so every collection indexed before it
+    existed keeps exactly the name it already has.
+    """
+    return f"{prefix}_{variant}_{model}" if variant else f"{prefix}_{model}"
 
 
-def hybrid_collection_for(prefix: str, model: str) -> str:
+def hybrid_collection_for(prefix: str, model: str, variant: str = "") -> str:
     """Separate from the dense collection: Qdrant fixes a collection's vector
     layout at creation, so hybrid cannot be added to one that already exists."""
-    return f"{prefix}_hybrid_{model}"
+    return collection_for(f"{prefix}_hybrid", model, variant)
 
 
-def store_for(settings: Settings, model: str) -> VectorStore:
+def store_for(settings: Settings, model: str, variant: str = "") -> VectorStore:
     """Collection handle without loading the model - dim comes from the spec.
 
     Separate from `open_store` so "is this model indexed?" costs a REST call
     rather than a model download.
     """
     return VectorStore(
-        settings.qdrant_url, collection_for(settings.collection_prefix, model), MODELS[model].dim
+        settings.qdrant_url,
+        collection_for(settings.collection_prefix, model, variant),
+        MODELS[model].dim,
     )
 
 
-def open_store(settings: Settings, model: str) -> tuple[Embedder, VectorStore]:
+def open_store(settings: Settings, model: str, variant: str = "") -> tuple[Embedder, VectorStore]:
     """Embedder plus its collection, ready to index or query."""
-    return Embedder(model), store_for(settings, model)
+    return Embedder(model), store_for(settings, model, variant)
 
 
-def open_hybrid(settings: Settings, model: str) -> tuple[Embedder, SparseEmbedder, HybridStore]:
+def open_hybrid(
+    settings: Settings, model: str, variant: str = ""
+) -> tuple[Embedder, SparseEmbedder, HybridStore]:
     store = HybridStore(
         settings.qdrant_url,
-        hybrid_collection_for(settings.collection_prefix, model),
+        hybrid_collection_for(settings.collection_prefix, model, variant),
         MODELS[model].dim,
     )
     return Embedder(model), SparseEmbedder(), store

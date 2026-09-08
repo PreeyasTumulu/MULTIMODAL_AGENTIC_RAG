@@ -2,7 +2,9 @@ from analyst.chunking import (
     MAX_TABLE_CHARS,
     MAX_TABLE_ROWS,
     TARGET_CHARS,
+    DocContext,
     SourceElement,
+    budget,
     chunk_document,
 )
 
@@ -124,3 +126,86 @@ def test_empty_table_json_does_not_crash() -> None:
     chunks = chunk_document([_el(0, "table", "fallback text " * 10, table={})], "X", 2025)
     assert len(chunks) == 1
     assert chunks[0].type == "table"
+
+
+# --- ADR-008: contextual prefixes, heading hygiene, and the encoder budget ---
+
+
+def _ctx() -> DocContext:
+    return DocContext(ticker="SUNPHARMA", company="Sun Pharmaceutical Industries",
+                      fiscal_year=2024)
+
+
+def test_context_is_embedded_but_the_citation_text_stays_verbatim() -> None:
+    """The prefix helps the encoder; it must not end up quoted as the document."""
+    chunks = chunk_document(
+        [_el(0, "heading", "Revenue"), _el(1, "text", "Some body content here. " * 6)],
+        "SUNPHARMA", 2024, context=_ctx(),
+    )
+    c = chunks[0]
+    assert "Sun Pharmaceutical Industries" in c.embed_text
+    assert "year ended March 31, 2024" in c.embed_text
+    assert "Sun Pharmaceutical Industries" not in c.text
+    assert c.embed_text.endswith(c.text)
+
+
+def test_no_context_reproduces_the_baseline_exactly() -> None:
+    """The A/B arm: without a context the chunk is what it was before ADR-008."""
+    els = [_el(0, "heading", "Revenue"), _el(1, "text", "Body content here. " * 6)]
+    plain = chunk_document(els, "X", 2025)
+    assert plain[0].context == ""
+    assert plain[0].embed_text == plain[0].text
+
+
+def test_page_furniture_headings_are_dropped() -> None:
+    """'226 / Statutory Reports / Corporate Overview' is a running page band,
+    printed identically on every page - it cannot tell two chunks apart."""
+    chunks = chunk_document(
+        [
+            _el(0, "heading", "226\nStatutory Reports\nCorporate Overview\nFinancial Statements"),
+            _el(1, "text", "Body content here. " * 6),
+        ],
+        "X", 2025,
+    )
+    assert chunks[0].heading is None
+    assert "Statutory Reports" not in chunks[0].text
+
+
+def test_a_real_section_title_survives_the_furniture_filter() -> None:
+    chunks = chunk_document(
+        [
+            _el(0, "heading", "212\nConsolidated Balance Sheet\nStatutory Reports"),
+            _el(1, "text", "Body content here. " * 6),
+        ],
+        "X", 2025,
+    )
+    assert chunks[0].heading == "Consolidated Balance Sheet"
+
+
+def test_an_oversized_single_element_is_split_not_truncated() -> None:
+    """Regression: the row packer was the only path that respected the budget,
+    so one 5,116-char element became one chunk and the encoder read ~1,280."""
+    huge = "\n".join(f"Sentence number {i} of a very long unbroken passage." for i in range(200))
+    chunks = chunk_document([_el(0, "text", huge)], "X", 2025)
+    assert len(chunks) > 1
+    assert all(len(c.embed_text) <= budget("text") for c in chunks)
+
+
+def test_an_unparsed_table_is_split_to_the_table_budget() -> None:
+    """table_json with no rows fell through to raw text with no cap at all."""
+    dump = "\n".join(f"Line item {i} | {i}0,000.00 | {i}5,000.00" for i in range(300))
+    chunks = chunk_document([_el(0, "table", dump, table={})], "X", 2025)
+    assert len(chunks) > 1
+    assert all(len(c.embed_text) <= budget("table") for c in chunks)
+
+
+def test_the_prefix_is_charged_against_the_chunk_budget() -> None:
+    """Adding context must shrink the passage, not overflow the encoder."""
+    rows = [[f"Line item {i}", f"{i}0,000.00", f"{i}5,000.00"] for i in range(200)]
+    table = {"header": ["Particulars", "FY2024", "FY2023"], "rows": rows, "n_rows": len(rows)}
+    with_ctx = chunk_document([_el(0, "table", "x", table=table)], "SUNPHARMA", 2024,
+                              context=_ctx())
+    assert all(len(c.embed_text) <= budget("table") for c in with_ctx)
+    # Same content, more chunks, because each one now carries the prefix too.
+    without = chunk_document([_el(0, "table", "x", table=table)], "SUNPHARMA", 2024)
+    assert len(with_ctx) >= len(without)

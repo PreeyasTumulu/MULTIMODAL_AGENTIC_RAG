@@ -19,9 +19,11 @@ The pipeline, in order, as runnable notebooks that **show their output**.
 | 11 | [Hybrid retrieval](11_hybrid_retrieval.ipynb) | BM25 + dense, fused by RRF | ~35 min |
 | 12 | [Query expansion](12_query_expansion.ipynb) | Closes the question/filing vocabulary gap — **the real lever** | ~2 min |
 | 13 | [Reranking](13_reranking.ipynb) | Cross-encoder over a shortlist — measured, not adopted | ~8 min |
+| 14 | [Contextual chunk prefixes](14_contextual_chunks.ipynb) | The **document** side of the vocabulary gap — company + FY on every chunk | ~2 h |
 
 01–08 are a dependency chain: each needs the ones before it to have run at least
-once. 11 needs 01–06. 09 and 10 are safe at any point.
+once. 11 needs 01–06. 14 needs 01–06 and re-indexes into its own collections, so
+it does not disturb 07's. 09 and 10 are safe at any point.
 
 Everything is **idempotent** — re-running never duplicates data.
 
