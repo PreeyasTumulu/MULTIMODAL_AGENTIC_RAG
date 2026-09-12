@@ -7,6 +7,46 @@ Notable changes per development day. Format loosely follows
 
 ## [Unreleased]
 
+### Day 6 — from chunks to answers: agent, verifier, API
+
+**The system now answers.** `analyst.agent` routes a question, retrieves with the
+leaderboard's best configuration, has the LLM *point at* a figure, and accepts it
+only if that figure is printed in the evidence the model cited. Arithmetic runs in
+Python; anything unverifiable is refused. Plain Python, no agent framework —
+[ADR-009](adr/0009-answer-generation.md).
+
+Baseline on local `llama3.2` (3B): 44 benchmark questions plus 16 generated
+unanswerable ones ([`results/answers.md`](../results/answers.md)).
+
+| accuracy | wrong | false refusal | refusal (unanswerable) | calls / tokens per question | p50 |
+|---|---|---|---|---|---|
+| 0.227 | **0.568** | 0.205 | **1.000** | 2.1 / 2,909 | 4.6 s |
+
+- **Grading needs no LLM judge.** Every answer is a number with a known true value:
+  the figure counts at any printed scale (exactly how notebook 06 located it), a
+  growth rate within 1 point.
+- **The verifier stops invented figures, not misread ones.** 25 answers were real
+  figures from the wrong line, and in 9 of them the right table was retrieved and
+  cited. That is the case for measuring a larger model next, not a better retriever.
+- **The "benchmark labels" worry, measured.** Retrieval driven by the router's output
+  instead of the benchmark's stored labels is within about one question at every
+  depth: R@5 0.386 vs 0.318, @50 0.773 vs 0.795, @200 1.000 for both.
+
+Found by live runs and fixed, each with a regression test:
+
+- Ollama's OpenAI-compatible endpoint **silently truncated** an 11,021-token prompt to
+  2,050 tokens. `analyst.llm` talks to Ollama through its native API with `num_ctx`.
+- A unit the model asserted turned ICICI Bank's +15% into **+1,129.6%**. A unit now
+  counts only when the cited evidence prints it, and an answer whose page states no
+  unit says so.
+- llama3.2 wrote figures into its sentence and left `value` null, and routed "How has
+  Reliance Industries traded?" to no company at all. Both are now handled in Python.
+- Groq's free tier no longer lists Llama 3.x. Its free models allow **8K tokens a
+  minute**, so one request is capped at about 20 evidence chunks.
+
+**Serving.** FastAPI (`analyst/api.py`) returns the agent's `Answer` model unchanged;
+Streamlit (`analyst/ui.py`) is a thin client of it. Verified end to end in a browser.
+
 ### Added — the run ledger: measurements became records
 
 Every metric this project had produced lived inside a notebook output cell. Fine

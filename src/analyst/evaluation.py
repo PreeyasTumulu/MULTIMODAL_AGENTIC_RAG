@@ -202,7 +202,7 @@ def load_questions(path: Path) -> list[BenchmarkQuestion]:
     return [BenchmarkQuestion.model_validate_json(x) for x in text.splitlines() if x.strip()]
 
 
-def _table(rows: Sequence[Sequence[str]]) -> list[str]:
+def markdown_table(rows: Sequence[Sequence[str]]) -> list[str]:
     return ["| " + " | ".join(rows[0]) + " |", "|" + "|".join(["---"] * len(rows[0])) + "|",
             *["| " + " | ".join(r) + " |" for r in rows[1:]]]
 
@@ -226,13 +226,13 @@ def render_leaderboard(runs: Sequence[Run], ks: Sequence[int] = K_VALUES) -> str
              f"{r.metrics.mrr:.3f}", f"{r.metrics.page_recall_at_5:.3f}",
              f"{r.metrics.p50_ms:.0f}", f"`{r.bench_sha[:8]}`", f"`{r.git_rev}`"]
             for r in sorted(runs, key=lambda r: r.metrics.recall_at.get(5, 0.0), reverse=True)]
-    out += _table([head, *body])
+    out += markdown_table([head, *body])
 
     if curves := [r for r in runs if r.depth_curve]:
         depths = sorted({d for r in curves for d in r.depth_curve})
         out += ["", "## Recall by search depth", "",
                 "Where this flattens is the ceiling for anything that only reorders results.", ""]
-        out += _table([["run", *map(str, depths)],
+        out += markdown_table([["run", *map(str, depths)],
                        *[[r.run_id, *[f"{r.depth_curve.get(d, 0.0):.3f}" for d in depths]]
                          for r in curves]])
     return "\n".join([*out, ""])

@@ -34,10 +34,16 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     collection_prefix: str = "elements"
 
-    # --- llm providers (wired on Day 5)
+    # --- llm providers (ADR-002; wired on Day 6 in analyst.llm)
     groq_api_key: SecretStr | None = None
     openrouter_api_key: SecretStr | None = None
     ollama_base_url: str = "http://localhost:11434"
+    # Which one answers. Local by default, so nothing needs a key to run.
+    llm_provider: str = "ollama"
+    llm_model: str = "llama3.2"
+
+    # --- serving. Not 8000: another local project already binds it on this machine.
+    api_url: str = "http://localhost:8400"
 
     # --- paths / misc
     data_dir: Path = Path("data")

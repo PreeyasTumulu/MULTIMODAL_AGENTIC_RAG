@@ -126,6 +126,28 @@ class ElementRow(Base):
     __table_args__ = (Index("ix_elements_doc_page", "document_id", "page"),)
 
 
+class FigureDescription(Base):
+    """What a vision model says a figure shows (ADR-010).
+
+    Generated text, not the filing's - so it lives beside `elements`, never inside
+    `elements.text`, and records which model wrote it. A citation built from it
+    can then say who described the figure instead of quoting a model as if it
+    were the annual report.
+    """
+
+    __tablename__ = "figure_descriptions"
+
+    element_id: Mapped[str] = mapped_column(
+        ForeignKey("elements.element_id", ondelete="CASCADE"), primary_key=True
+    )
+    model: Mapped[str] = mapped_column(String(80))
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    description: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Fact(Base):
     """A single reported financial line item.
 

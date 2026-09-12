@@ -62,43 +62,43 @@ citations, or an explicit refusal when evidence is insufficient.
 | FR-3.3 | Reject figures too short to match uniquely | ✅ | `MIN_DIGITS = 4` |
 | FR-3.4 | Locate an oracle value on a specific page of its source document | ✅ | `demo_oracle_link.py`: 3 companies, 3 different scales |
 | FR-3.5 | Discard facts that cannot be located rather than scoring them as failures | ✅ | Verified on SUNPHARMA Gross Profit |
-| FR-3.6 | Generate ≥100 benchmark questions with ground-truth answer and source | 🔜 | Day 3 |
-| FR-3.7 | Eliminate coincidental matches by requiring concept-label proximity | 🧭 | Day 3 — current 47–57% is a ceiling, not a score |
+| FR-3.6 | Generate ≥100 benchmark questions with ground-truth answer and source | 🔜 | **44 so far** (34 lookups + 10 growth). Proximity filtering traded coverage for trust; the target is not met |
+| FR-3.7 | Eliminate coincidental matches by requiring concept-label proximity | ✅ | `benchmark.locate`: the value and a concept label must share one element |
 
 ### 2.4 Indexing and retrieval
 
 | ID | Requirement | Status | Verification |
 |---|---|---|---|
-| FR-4.1 | Chunk elements without splitting any table | 🔜 | Day 3 |
-| FR-4.2 | Embed chunks locally on GPU | 🔜 | Day 3 |
-| FR-4.3 | Every vector payload carries enough metadata to filter and to cite | 🔜 | Day 3 |
-| FR-4.4 | Apply metadata filters before vector scoring | 🔜 | Day 3 |
-| FR-4.5 | Combine dense and sparse retrieval | 🔜 | Day 4 |
-| FR-4.6 | Rerank candidates with a cross-encoder | 🔜 | Day 4 |
-| FR-4.7 | Report Recall@k and MRR against the benchmark **without any LLM call** | 🔜 | Day 3 |
+| FR-4.1 | Chunk elements without separating a table from its header | ✅ | `test_chunking.py`; a split table repeats its header on every slice |
+| FR-4.2 | Embed chunks locally | ✅ | fastembed / ONNX — **on CPU**, not GPU; ~5.5 chunks/s at `parallel=4` |
+| FR-4.3 | Every vector payload carries enough metadata to filter and to cite | ✅ | `vectorstore._payload`: ticker, fiscal_year, element_ids, pages |
+| FR-4.4 | Apply metadata filters before vector scoring | ✅ | Indexed payload fields; `ticker+year` policy |
+| FR-4.5 | Combine dense and sparse retrieval | ✅ | Built and measured (RRF); **not the default** — dense beat it after ADR-008 |
+| FR-4.6 | Rerank candidates with a cross-encoder | ✅ | Built and measured; **rejected** — R@5 fell 0.318 → 0.204 ([ADR-007](../adr/0007-retrieval-strategy.md)) |
+| FR-4.7 | Report Recall@k and MRR against the benchmark **without any LLM call** | ✅ | `results/runs.jsonl` → `results/leaderboard.md` |
 
 ### 2.5 Reasoning agents
 
 | ID | Requirement | Status | Verification |
 |---|---|---|---|
-| FR-5.1 | Classify each question and select the agent set, with a stated reason | 🔜 | Day 6 |
-| FR-5.2 | Document Agent retrieves passages and returns citable elements | 🔜 | Day 5 |
-| FR-5.3 | Table Agent reads exact values from `table_json`, never from text | 🔜 | Day 5 |
-| FR-5.4 | SQL Agent connects as a read-only role | 🔜 | Day 5 |
-| FR-5.5 | SQL Agent enforces row limits and a statement timeout | 🔜 | Day 5 |
-| FR-5.6 | SQL Agent rejects any non-`SELECT` statement before execution | 🔜 | Day 5 |
-| FR-5.7 | Vision Agent describes figures and links each to its source page | 🔜 | Day 5 |
-| FR-5.8 | **All arithmetic is performed in Python, never by the model** | 🔜 | Day 5 |
+| FR-5.1 | Classify each question and select the path, with auditable output | ✅ | `agent.parse_route`, checked against the database; the raw route is in the trace. 9 of 44 routes differ from labels (notebook 15) |
+| FR-5.2 | Retrieve passages and return citable elements | ✅ | `Citation.element_ids` + pages; narrowed to blocks that print the figure |
+| FR-5.3 | Read exact values from `table_json`, never from text | 🔜 | **Not built as specified.** Figures are verified against the printed chunk text (value-exact, grouping-agnostic), not read from `table_json` cells |
+| FR-5.4 | Price queries cannot write | ✅ | No SQL from the LLM at all; fixed queries inside a `READ ONLY` transaction (no separate DB role) |
+| FR-5.5 | Price queries are bounded | 🔜 | One ticker per query (≤1,240 rows); **no statement timeout set** |
+| FR-5.6 | No LLM-authored SQL statement ever executes | ✅ | By construction: the LLM supplies a ticker and dates only (`tools.price_summary`) |
+| FR-5.7 | Describe figures and link each to its source page | 🔜 | `vision.py` built; full batch in notebook 16 |
+| FR-5.8 | **All arithmetic is performed in Python, never by the model** | ✅ | `test_agent.py` growth tests; units applied only when printed in the evidence |
 
 ### 2.6 Answering
 
 | ID | Requirement | Status | Verification |
 |---|---|---|---|
-| FR-6.1 | Every numeric claim carries a resolvable `element_id` | 🔜 | Day 6 |
-| FR-6.2 | Verify each claim is grounded in retrieved context before answering | 🔜 | Day 6 |
-| FR-6.3 | Abstain explicitly when evidence is insufficient | 🔜 | Day 6 |
-| FR-6.4 | Expose which agents ran, why, which sources were used, and what was computed | 🔜 | Day 6 |
-| FR-6.5 | Never expose raw chain-of-thought — only auditable traces | 🔜 | Day 6 |
+| FR-6.1 | Every numeric claim carries a resolvable `element_id` | ✅ | A verified figure is cited to the element(s) printing it |
+| FR-6.2 | Verify each claim is grounded in retrieved context before answering | ✅ | **Figures only**: every 4+-digit figure must be printed in the cited evidence. Prose claims are not checked |
+| FR-6.3 | Abstain explicitly when evidence is insufficient | ✅ | 16 of 16 generated unanswerable questions refused (notebook 15) |
+| FR-6.4 | Expose the route, sources used, and what was computed | ✅ | `Answer.trace`, `citations`, `computations` |
+| FR-6.5 | Never expose raw chain-of-thought — only auditable traces | ✅ | JSON-mode replies only; no reasoning text is requested or returned |
 
 ---
 
@@ -111,7 +111,7 @@ citations, or an explicit refusal when evidence is insufficient.
 | NFR-1.1 | Monetary values stored with exact decimal precision | ✅ | `Numeric(30,4)`; no float anywhere in the money path |
 | NFR-1.2 | Currency and unit are part of a fact's identity | ✅ | `facts.unit`; `test_facts.py` |
 | NFR-1.3 | Schema changes applied by migration, never `create_all()` | ✅ | 4 Alembic migrations |
-| NFR-1.4 | Vector search never supplies an authoritative value | 🔜 | Qdrant payload carries `element_id`, not truth |
+| NFR-1.4 | Vector search never supplies an authoritative value | 🔜 | ⚠️ **Partly violated today:** the verifier checks figures against chunk text carried in the Qdrant payload — a verbatim copy of `elements.text`, but not re-read from Postgres |
 
 ### 3.2 Security
 
@@ -119,8 +119,8 @@ citations, or an explicit refusal when evidence is insufficient.
 |---|---|---|---|
 | NFR-2.1 | No secret is committed | ✅ | `.env` git-ignored; `.env.example` has no values |
 | NFR-2.2 | Secrets never enter logs or serialised models | ✅ | `SecretStr`; `database_url` is a property, not a `computed_field` |
-| NFR-2.3 | Retrieved document content is treated as data, never as instructions | 🔜 | Day 6 — prompt-injection defence |
-| NFR-2.4 | Database access for agents is read-only | 🔜 | Day 5 |
+| NFR-2.3 | Retrieved document content is treated as data, never as instructions | 🔜 | Evidence is fenced in `<evidence>` and the prompt says to ignore instructions inside it — **untested against an injection** |
+| NFR-2.4 | Database access for agents is read-only | ✅ | `tools.py`: `SET TRANSACTION READ ONLY` on every query |
 | NFR-2.5 | Uploaded/downloaded files validated by content type and checksum | ✅ | `download_docs.py` rejects non-PDF responses |
 
 ### 3.3 Reliability
@@ -137,24 +137,24 @@ citations, or an explicit refusal when evidence is insufficient.
 |---|---|---|---|
 | NFR-4.1 | Parse a 300-page report in under 60 s | ✅ | ~50 s including figure extraction |
 | NFR-4.2 | Text extraction under 2 s per document | ✅ | 0.7–1.4 s measured ([ADR-004](../adr/0004-pdf-parser.md)) |
-| NFR-4.3 | End-to-end query latency under 15 s | 🔜 | Day 6 |
+| NFR-4.3 | End-to-end query latency under 15 s | 🔜 | p50 4.6 s on local `llama3.2` (notebook 15); the tail is not yet measured |
 
 ### 3.5 Cost
 
 | ID | Requirement | Status | Verification |
 |---|---|---|---|
 | NFR-5.1 | Zero rupees of paid API or service spend | ✅ | No paid dependency in `pyproject.toml` or infrastructure |
-| NFR-5.2 | Retrieval evaluation consumes no LLM quota | 🔜 | Day 3 — metrics are pure computation |
+| NFR-5.2 | Retrieval evaluation consumes no LLM quota | ✅ | Pure computation; answer grading needs no LLM judge either |
 | NFR-5.3 | Deployment fits inside available AWS credits | 🔜 | Day 7 |
 
 ### 3.6 Maintainability
 
 | ID | Requirement | Status | Verification |
 |---|---|---|---|
-| NFR-6.1 | `mypy --strict` clean across src, scripts and tests | ✅ | 25 source files, zero errors |
+| NFR-6.1 | `mypy --strict` clean across src and tests | ✅ | 40 source files, zero errors (2026-09-12) |
 | NFR-6.2 | `ruff` clean | ✅ | Zero findings |
 | NFR-6.3 | Business logic is unit-testable without network or database | ✅ | `numfmt`, `facts`, `prices`, `provenance` all pure |
-| NFR-6.4 | Every significant decision recorded as an ADR | ✅ | ADR-001…004 |
+| NFR-6.4 | Every significant decision recorded as an ADR | ✅ | ADR-001…009 |
 | NFR-6.5 | Schema documentation generated, not hand-written | ✅ | `gen_schema_docs.py` |
 | NFR-6.6 | Automated tests run in CI on every push | 🔜 | Day 7 |
 

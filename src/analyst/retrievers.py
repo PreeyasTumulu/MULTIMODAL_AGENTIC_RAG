@@ -66,8 +66,8 @@ def open_hybrid(
     return Embedder(model), SparseEmbedder(), store
 
 
-def expand_query(q: BenchmarkQuestion) -> str:
-    """Rewrite the question in the vocabulary the filings actually print.
+def expand(text: str, concept: str | None, fiscal_year: int | None) -> str:
+    """Rewrite a question in the vocabulary the filings actually print.
 
     The measured problem, not a guess: a question and the element answering it
     share a median of TWO words. "total revenue in FY2024" is printed as
@@ -80,8 +80,18 @@ def expand_query(q: BenchmarkQuestion) -> str:
 
     Measured on bge-small, ticker+year: recall at depth 200 went 0.432 -> 0.682.
     """
-    aliases = " ".join(CONCEPT_ALIASES.get(q.concept, ()))
-    return f"{q.question} {aliases} year ended March 31, {q.fiscal_year}"
+    aliases = " ".join(CONCEPT_ALIASES.get(concept or "", ()))
+    year = f" year ended March 31, {fiscal_year}" if fiscal_year else ""
+    return f"{text} {aliases}{year}"
+
+
+def expand_query(q: BenchmarkQuestion) -> str:
+    """`expand` driven by the benchmark's own labels - what every leaderboard row used.
+
+    ⚠️ That is an upper bound. In production the concept and year come from the
+    router (`filings` below), which can get them wrong.
+    """
+    return expand(q.question, q.concept, q.fiscal_year)
 
 
 def _check(filters: str) -> bool:
@@ -172,5 +182,23 @@ def reranked(
         scores = reranker.scores(text, [h.text for h in candidates])
         order = sorted(range(len(candidates)), key=lambda i: scores[i], reverse=True)
         return [candidates[i] for i in order[:limit]]
+
+    return search
+
+
+def filings(
+    embedder: Embedder, store: VectorStore
+) -> Callable[[str, str | None, int | None, str | None, int], list[Hit]]:
+    """What the agent searches with: the leaderboard's best configuration.
+
+    Dense + query expansion over ADR-008's `ctx` index, filtered by ticker and
+    year. Identical to the measured retriever with one difference that matters:
+    the ticker, year and concept arrive from the ROUTER, not from benchmark labels.
+    """
+
+    def search(text: str, ticker: str | None, fiscal_year: int | None, concept: str | None,
+               limit: int) -> list[Hit]:
+        return store.search(embedder.embed_query(expand(text, concept, fiscal_year)),
+                            limit=limit, ticker=ticker, fiscal_year=fiscal_year)
 
     return search

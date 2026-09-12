@@ -42,6 +42,21 @@ def test_heading_is_prepended_to_the_text_beneath_it() -> None:
     assert chunks[0].heading == "Speciality Segment"
 
 
+def test_a_described_figure_is_its_own_chunk_and_an_undescribed_one_is_skipped() -> None:
+    """A vision model's description must stay separable from the filing's own prose."""
+    chunks = chunk_document(
+        [
+            _el(0, "text", "Revenue grew 12 percent year on year. " * 4),
+            _el(1, "figure", "Bar chart: revenue FY21 33,498 rising to FY25 52,041 crore"),
+            _el(2, "figure", None),
+        ],
+        "SUNPHARMA",
+        2025,
+    )
+    assert [c.type for c in chunks] == ["text", "figure"]
+    assert chunks[1].element_ids == ["DOC:p0001:e0001"]
+
+
 def test_a_new_heading_ends_the_previous_chunk() -> None:
     """Mixing two sections into one chunk makes the retriever cite the wrong one."""
     chunks = chunk_document(

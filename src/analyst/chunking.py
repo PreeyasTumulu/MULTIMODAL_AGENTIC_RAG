@@ -366,6 +366,18 @@ def chunk_document(
             out.extend(_table_chunks(el, heading, ctx, reserve))
             continue
 
+        if el.type == "figure":
+            # `text` here is a vision model's description (analyst.vision), present only
+            # when the caller loaded one. One chunk per figure, never merged into the
+            # filing's prose: generated text has to stay separable from quoted text.
+            if el.text:
+                flush()
+                out.append(Chunk(chunk_id=f"{el.element_id}#0", document_id=el.document_id,
+                                 ticker=ctx.ticker, fiscal_year=ctx.fiscal_year,
+                                 element_ids=[el.element_id], pages=[el.page], type="figure",
+                                 heading=heading, text=el.text, context=ctx.prefix))
+            continue
+
         if el.type != "text" or not el.text:
             continue
 

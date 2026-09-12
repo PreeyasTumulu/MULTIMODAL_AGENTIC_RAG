@@ -1,5 +1,9 @@
 # ---- data: NEVER commit the corpus. It is reproducible from scripts + manifest.
-data/
+# Anchored with a leading slash: an unanchored `data/` also matched docs/data/, so
+# the generated schema reference and the sources page were never committed.
+/data/
+# Orphan copy made when a notebook ran with CWD=notebooks/ (see analyst.config.ROOT).
+notebooks/data/
 *.pdf
 *.parquet
 

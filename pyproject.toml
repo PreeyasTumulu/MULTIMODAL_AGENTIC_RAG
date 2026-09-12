@@ -19,6 +19,9 @@ dependencies = [
     "pdfplumber>=0.11.10",
     "qdrant-client>=1.12",
     "fastembed>=0.5",
+    "fastapi>=0.141.1",
+    "uvicorn>=0.52.4",
+    "streamlit>=1.63.0",
 ]
 
 [dependency-groups]
@@ -72,5 +75,5 @@ addopts = "-q --strict-markers"
 # the rule for the two modules that touch it keeps strict mode everywhere else
 # rather than weakening the whole project.
 [[tool.mypy.overrides]]
-module = ["analyst.parsing"]
+module = ["analyst.parsing", "analyst.vision"]
 disallow_untyped_calls = false

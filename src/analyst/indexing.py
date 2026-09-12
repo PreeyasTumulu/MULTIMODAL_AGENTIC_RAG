@@ -12,11 +12,12 @@ from sqlalchemy import select
 
 from analyst.chunking import Chunk, DocContext, SourceElement, chunk_document
 from analyst.db import session_scope
-from analyst.models import Company, Document, ElementRow
+from analyst.models import Company, Document, ElementRow, FigureDescription
+from analyst.vision import KEEP
 
 
 def load_chunks(
-    with_context: bool = False, strip_furniture: bool | None = None
+    with_context: bool = False, strip_furniture: bool | None = None, with_figures: bool = False
 ) -> list[Chunk]:
     """Every document, chunked.
 
@@ -25,8 +26,18 @@ def load_chunks(
     prefix, so a +0.25 R@5 could not be assigned to either. `strip_furniture`
     defaults to following `with_context`, which reproduces the original `fix`
     and `ctx` arms exactly, and can be set independently for the `strip` arm.
+
+    `with_figures` adds one chunk per figure whose vision description says it
+    carries information (ADR-010). Off by default, so every earlier arm still
+    rebuilds exactly as it was measured.
     """
     strip = with_context if strip_furniture is None else strip_furniture
+    described: dict[str, str] = {}
+    if with_figures:
+        with session_scope() as s:
+            described = dict(s.execute(
+                select(FigureDescription.element_id, FigureDescription.description)
+                .where(FigureDescription.kind.in_(KEEP))).tuples().all())
     out: list[Chunk] = []
     with session_scope() as s:
         for d in s.execute(select(Document).order_by(Document.ticker)).scalars().all():
@@ -37,8 +48,10 @@ def load_chunks(
                 .where(ElementRow.document_id == d.document_id)
                 .order_by(ElementRow.page, ElementRow.seq)
             ).all()
+            # Only figure rows have no text of their own, so `or` fills exactly those.
             els = [SourceElement(element_id=r[0], document_id=r[1], page=r[2], seq=r[3],
-                                 type=r[4], text=r[5], table_json=r[6]) for r in rows]
+                                 type=r[4], text=r[5] or described.get(r[0]), table_json=r[6])
+                   for r in rows]
             ctx = (
                 DocContext(ticker=d.ticker,
                            company=company.name if company else d.ticker,

@@ -20,10 +20,14 @@ The pipeline, in order, as runnable notebooks that **show their output**.
 | 12 | [Query expansion](12_query_expansion.ipynb) | Closes the question/filing vocabulary gap — **the real lever** | ~2 min |
 | 13 | [Reranking](13_reranking.ipynb) | Cross-encoder over a shortlist — measured, not adopted | ~8 min |
 | 14 | [Contextual chunk prefixes](14_contextual_chunks.ipynb) | The **document** side of the vocabulary gap — company + FY on every chunk | ~2 h |
+| 15 | [Answering](15_answering.ipynb) | Route → retrieve → extract → **verify** → compute, or refuse — graded against the oracle, no LLM judge | ~5 min (local LLM) |
+| 16 | [Figures](16_figures.ipynb) | Vision triage of the 418 figures; informative ones indexed, with a retrieval control | ~1 h (GPU) |
 
 01–08 are a dependency chain: each needs the ones before it to have run at least
 once. 11 needs 01–06. 14 needs 01–06 and re-indexes into its own collections, so
-it does not disturb 07's. 09 and 10 are safe at any point.
+it does not disturb 07's. 15 needs 14's `ctx` index and an LLM (local Ollama by
+default, no key). 16 needs 04 and 14, and adds figure points to the `ctx` index.
+09 and 10 are safe at any point.
 
 Everything is **idempotent** — re-running never duplicates data.
 
@@ -33,7 +37,7 @@ Everything is **idempotent** — re-running never duplicates data.
 
 | Lives in | What | Why |
 |---|---|---|
-| `src/analyst/*.py` | All reusable logic — parsing, chunking, embeddings, the oracle matcher, the vector store | Importable, unit-tested (37 tests), `mypy --strict` clean. A notebook cannot be imported, type-checked, or tested. |
+| `src/analyst/*.py` | All reusable logic — parsing, chunking, embeddings, the oracle matcher, the vector store, the agent, the API | Importable, unit-tested (99 tests), `mypy --strict` clean. A notebook cannot be imported, type-checked, or tested. |
 | `notebooks/*.ipynb` | Orchestration and results | Shows its work. A reviewer sees the numbers without running anything. |
 
 The notebooks are deliberately thin: they call into `analyst` and display what
@@ -59,7 +63,7 @@ uv run jupyter nbconvert --to notebook --execute --inplace \
   --ExecutePreprocessor.timeout=3600 notebooks/07_index_chunks.ipynb
 ```
 
-**Currently carrying outputs:** 06, 07, 08, 09, 10, 11, 12, 13. **01-05 have never
+**Currently carrying outputs:** 06–15. **01-05 have never
 been executed with outputs saved** — they are the acquisition and parsing steps, and
 running them re-downloads and re-parses the corpus. That is the one remaining gap.
 

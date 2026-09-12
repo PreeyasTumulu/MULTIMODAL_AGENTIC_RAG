@@ -1,8 +1,14 @@
 # API specification
 
-**Status:** 🔜 **Designed, not built.** Implementation is Day 6.
-This document is the contract the implementation must satisfy — it is written
-now so the agent and orchestration work has a target shape.
+**Status:** ✅ **Built (Day 6)** in `src/analyst/api.py`: `POST /api/v1/ask`,
+`GET /api/v1/companies`, `GET /api/v1/elements/{element_id}`,
+`GET /api/v1/figures/{element_id}`, `GET /health`.
+🔜 **Not built:** `/ask/stream`, `/documents`, API-key auth, rate limiting, and the
+uniform error envelope — FastAPI's default `{"detail": ...}` is returned, with **422**
+(not 400) for validation errors.
+
+This document was written first as the target shape. **Where it and the code
+differ, [As built](#as-built) below is the truth.**
 
 **Framework:** FastAPI · **Base path:** `/api/v1` · **Content type:** `application/json`
 
@@ -34,6 +40,48 @@ now so the agent and orchestration work has a target shape.
 | `GET` | `/api/v1/figures/{element_id}` | Fetch a figure image |
 | `GET` | `/health` | Liveness + dependency status |
 | `GET` | `/docs` | OpenAPI UI (FastAPI built-in) |
+
+---
+
+## As built
+
+`POST /api/v1/ask` returns the agent's own `Answer` model (`analyst.agent.Answer`), so
+the API cannot drift from what notebook 15 measured. A real response, abbreviated:
+
+```jsonc
+{
+  "question": "What was ICICI Bank's net profit in FY2024?",
+  "answer": "ICICI Bank's net profit in FY2024 was ₹ 442,563,735",
+  "abstained": false,
+  "abstain_reason": null,
+  "values": ["442,563,735"],            // verified figures, as printed
+  "citations": [{
+    "document_id": "ICICIBANK-annual_report-FY2024-da71b80e",
+    "ticker": "ICICIBANK", "fiscal_year": 2024,
+    "pages": [271],
+    "element_ids": ["ICICIBANK-annual_report-FY2024-da71b80e:p0271:e0000"],
+    "type": "table",
+    "snippet": "…"
+  }],
+  "computations": [],                   // growth and price answers fill this
+  "route": {"intent": "value_lookup", "tickers": ["ICICIBANK"],
+            "fiscal_years": [2024], "concept": "Net Income"},
+  "trace": [{"step": "route", "ms": …, "detail": {…}},
+            {"step": "retrieve", "ms": …, "detail": {"k": 10, "pages": […]}},
+            {"step": "extract", "ms": …, "detail": {…}}],
+  "llm_calls": 2, "tokens": …, "ms": …
+}
+```
+
+How it differs from the design below:
+
+| Design | As built | Why |
+|---|---|---|
+| one `element_id` + `bbox` per citation | `element_ids` + `pages` lists; resolve bbox via `/elements` | a text chunk can span several elements |
+| `computations[].inputs` from `facts` | `expression`, `result`, `unit` only | `facts` is the evaluation oracle; the agent never reads it |
+| `confidence` | not returned | no calibrated signal exists to back it |
+| `trace.route_reason` | `route` + raw router output in `trace` | the route is data, not a sentence |
+| `400 validation_error` | `422` with FastAPI's `detail` | framework default; not yet wrapped |
 
 ---
 

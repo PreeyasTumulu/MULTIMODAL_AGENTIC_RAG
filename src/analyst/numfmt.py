@@ -131,6 +131,16 @@ def find_value_tolerant(
     return best
 
 
+def figures(text: str) -> list[Decimal]:
+    """Every figure in `text` long enough to identify (MIN_DIGITS), as a value.
+
+    Grouping-agnostic, so "9,64,693" and "964,693" are the same figure. This is
+    how the agent's verifier checks a model's number against the evidence.
+    """
+    found = (parse_printed(m.group(0).rstrip(",")) for m in _NUMBER.finditer(text))
+    return [d for d in found if d is not None]
+
+
 def find_value(value: Decimal, text: str) -> str | None:
     """Return the matched printed form, or None.
 

@@ -1,6 +1,7 @@
 # Architecture overview
 
-**Status:** ✅ ingestion + storage built · 🔜 retrieval, agents, serving designed
+**Status:** ✅ ingestion, storage, retrieval, answering, figure triage and serving built ·
+🔜 deployment
 
 ---
 
@@ -9,42 +10,45 @@
 A single-path RAG system embeds the question, runs a cosine search, stuffs the
 top chunks into a prompt and generates. That path answers *"what risks does the
 report mention?"* well and fabricates *"what was revenue in FY25?"* confidently,
-because **text similarity is a poor retrieval mechanism for an exact number**.
+because **nothing checks the number against the document**.
 
-So the first decision is not *how to retrieve* but *what kind of question this
-is*. Everything below follows from that.
+So the language model is not allowed to be the source of a number. It routes the
+question and *points at* a figure; Python checks that the figure is printed in the
+evidence the model cited, and does the arithmetic. Everything below follows from that.
 
 ---
 
-## Component map
+## Component map — as built
 
 ```mermaid
 flowchart TB
-    U["User"] --> API["FastAPI 🔜<br/>stream · auth · rate-limit"]
-    API --> LG["LangGraph orchestrator 🔜"]
-    LG --> R{"Router 🔜<br/>structured output"}
+    UI["Streamlit ✅"] --> API["FastAPI ✅<br/>/api/v1/ask"]
+    API --> AG["agent.ask ✅<br/>plain Python"]
+    AG --> R{"Route ✅<br/>LLM, JSON — checked against Postgres"}
 
-    R --> DA["Document Agent 🔜"]
-    R --> TA["Table Agent 🔜"]
-    R --> SA["SQL Agent 🔜<br/>read-only role"]
-    R --> VA["Vision Agent 🔜"]
-    R --> CA["Calculator 🔜<br/>deterministic"]
+    R -->|price| PQ["Fixed price query ✅<br/>READ ONLY"]
+    R -->|unsupported / out of corpus| ABS["Refuse"]
+    R -->|lookup · growth · narrative| RET["Retrieve ✅<br/>Qdrant: dense + expansion, ticker+year"]
 
-    DA --> QD[("Qdrant 🔜")]
-    TA --> QD
-    TA --> PG
-    SA --> PG[("PostgreSQL ✅")]
-    VA --> FIG["data/figures ✅"]
+    RET --> EX["Extract ✅<br/>LLM names a figure + evidence block"]
+    EX --> VF{"Verify ✅<br/>Python: printed in the cited block?"}
+    VF -->|no| RETRY["One wider retrieval, k=20"]
+    RETRY --> EX
+    VF -->|still no| ABS
+    VF -->|yes| CALC["Compute ✅<br/>Python"]
+    PQ --> CALC
+    CALC --> ANS["Answer + citations + trace"]
 
-    QD -.element_id.-> PG
-
-    DA & TA & SA & VA & CA --> RR["Reranker 🔜<br/>cross-encoder, local GPU"]
-    RR --> CB["Context builder 🔜"]
-    CB --> SY["Synthesizer 🔜"]
-    SY --> VF{"Verifier 🔜"}
-    VF -->|grounded| ANS["Answer + citations + trace"]
-    VF -->|not grounded| ABS["Insufficient evidence"]
+    PG[("PostgreSQL ✅<br/>elements · prices · figure_descriptions")] -.-> R
+    PG -.-> PQ
+    FIG["data/figures ✅<br/>gemma3:4b triage"] -.-> QD[("Qdrant ✅<br/>text · table · figure chunks")]
+    QD -.-> RET
 ```
+
+What was designed and **not** built, by decision: LangGraph (a fixed flow with one
+retry does not need a graph framework), a cross-encoder reranker (measured and
+rejected, [ADR-007](../adr/0007-retrieval-strategy.md)), LLM-written SQL (fixed queries
+instead), and any read of `facts` by the agent (it is the evaluation oracle).
 
 ---
 
@@ -55,17 +59,13 @@ flowchart TB
 | 1 | Acquisition | Reproducible download of prices, financials, PDFs | ✅ |
 | 2 | Parsing | PDF → typed elements with page + bbox provenance | ✅ |
 | 3 | Storage | Postgres (truth), filesystem (binaries) | ✅ |
-| 4 | Indexing | Chunking, embeddings, vector store | 🔜 Day 3 |
-| 5 | Retrieval | Hybrid dense+sparse, metadata filters, reranking | 🔜 Days 3–4 |
-| 6 | Agents | Document, Table, SQL, Vision, Calculator | 🔜 Day 5 |
-| 7 | Orchestration | Routing, state, fan-out/fan-in | 🔜 Day 6 |
-| 8 | Verification | Groundedness, citation validity, abstention | 🔜 Day 6 |
-| 9 | Serving | FastAPI + Streamlit | 🔜 Day 6 |
-| 10 | Evaluation | Auto-generated benchmark, retrieval + generation metrics | 🔜 Day 3 onward |
-
-Subsystems 2 and 3 gate everything: if parsing is bad, no amount of clever agent
-design recovers it. That is why the parser was chosen by
-[measurement](../adr/0004-pdf-parser.md) rather than reputation.
+| 4 | Indexing | Chunking with context prefixes, embeddings, Qdrant | ✅ [ADR-008](../adr/0008-contextual-chunk-prefixes.md) |
+| 5 | Retrieval | Dense + query expansion, metadata filters | ✅ [ADR-007](../adr/0007-retrieval-strategy.md) |
+| 6 | Answering | Route, extract, verify, compute, refuse | ✅ [ADR-009](../adr/0009-answer-generation.md) |
+| 7 | Figures | Vision triage by kind, described figures indexed | ✅ built · run in notebook 16 · [ADR-010](../adr/0010-figures.md) |
+| 8 | Serving | FastAPI + Streamlit | ✅ verified in a browser |
+| 9 | Evaluation | Retrieval ledger + answer ledger, no LLM judge | ✅ |
+| 10 | Deployment | Docker, CI, AWS | 🔜 |
 
 ---
 
@@ -77,11 +77,12 @@ Every design argument in this project reduces to these.
 |---|---|---|
 | **PostgreSQL** | Exact values, joins, filters | approximate anything |
 | **Qdrant** | Findability — which elements are relevant | hold an authoritative value |
-| **Python** | Arithmetic | interpret prose |
-| **LLM** | Language — routing, synthesis, explanation | compute, or assert a number it was not given |
+| **Python** | Verification and arithmetic | interpret prose |
+| **LLM** | Language — routing, pointing at evidence, phrasing | compute, or assert a number it was not shown |
 
-The LLM is the least trusted component in the system. It receives values; it
-does not produce them.
+⚠️ One known gap against these rules: the verifier checks a figure against the chunk
+text carried in the **Qdrant payload** — a verbatim copy of `elements.text`, but not
+re-read from Postgres (SRS NFR-1.4).
 
 ---
 
@@ -91,19 +92,15 @@ Measured on the development machine: **RTX 3050 Laptop, 4 GB VRAM**, 15.3 GB RAM
 
 | Workload | Where | Why |
 |---|---|---|
-| Embeddings (109M–568M) | **Local GPU** | Fits comfortably; batch work; unmetered |
-| Cross-encoder reranker | **Local GPU** | Same |
-| Vision / figure description | **Local GPU**, offline batch | `qwen3-vl` spills to CPU but this is not latency-critical |
-| Routing, synthesis, verification | **Groq API** | 5+ calls per query; a local 8B model at ~8 tok/s means 90–150 s per question |
-
-An agentic query makes many sequential LLM calls, so generation latency
-multiplies. Embeddings are single-pass and batchable, so they do not.
-**The GPU's job here is embeddings, reranking and vision — not generation.**
+| Embeddings (`bge-small`) | **CPU**, fastembed / ONNX | Small enough to run anywhere, including the GPU-less deploy target |
+| Figure triage (`gemma3:4b`) | **Local GPU**, offline batch | Fits 4 GB; not latency-critical |
+| Routing + extraction | **Ollama `llama3.2` locally** by default; **Groq** by configuration | One client, swapped by `.env` — [ADR-002](../adr/0002-llm-provider-stack.md), [ADR-009](../adr/0009-answer-generation.md) |
+| Verification + arithmetic | **Python** | Deterministic and free |
 
 🧭 The AWS deployment target has **no GPU**, so the deployed configuration is
-API-inference-only. That is why the model backend must be swappable by
-configuration rather than by code change. Local models are a *benchmark
-artifact*, not a deployment dependency — see [ADR-002](../adr/0002-llm-provider-stack.md).
+API-inference-only (Groq). That is why the provider is chosen by configuration rather
+than code. Groq's free models allow 8K tokens a minute, which caps one request at about
+20 evidence chunks.
 
 ---
 
@@ -112,9 +109,9 @@ artifact*, not a deployment dependency — see [ADR-002](../adr/0002-llm-provide
 ```mermaid
 flowchart LR
     subgraph DEV["Development — Windows + Docker Desktop"]
-        APP["Python app<br/>on host"]
+        APP["Python app on host<br/>API :8400 · UI :8502"]
         PGD[("postgres:17-alpine<br/>host :5433")]
-        QDD[("qdrant 🔜<br/>host :6333")]
+        QDD[("qdrant 1.12.4<br/>host :6333")]
         OLL["Ollama<br/>host :11434"]
         APP --> PGD & QDD & OLL
     end
@@ -122,7 +119,7 @@ flowchart LR
 
 The data plane runs in Docker; the application runs on the host during
 development. That keeps the edit-run loop fast and avoids rebuilding an image on
-every change. Everything is containerised on Day 7 for deployment.
+every change.
 
 ---
 
@@ -132,12 +129,12 @@ every change. Everything is containerised on Day 7 for deployment.
 |---|---|---|
 | Configuration | `pydantic-settings`, one `Settings` object; nothing reads `os.environ` directly | ✅ |
 | Secrets | `SecretStr`; `database_url` is a plain property, **not** a `computed_field`, because computed fields land in `model_dump()` and logs | ✅ |
-| Logging | `structlog`, key=value events — the same events become the user-facing reasoning trace | ✅ |
+| Logging | `structlog` key=value events; the answer's `trace` is the user-facing audit trail | ✅ |
 | Migrations | Alembic from the first commit | ✅ |
-| Types | `mypy --strict` across src, scripts and tests | ✅ |
-| Determinism | Element and document IDs are content-derived, so re-parsing never invalidates an index or an eval set | ✅ |
-| Prompt injection | Retrieved documents are treated as **data, never instructions** | 🔜 Day 6 |
-| SQL safety | Read-only role, validated queries, row limits, statement timeout | 🔜 Day 5 |
+| Types | `mypy --strict` across src and tests | ✅ |
+| Determinism | Content-derived IDs; temperature 0; every LLM reply cached on disk | ✅ |
+| Prompt injection | Evidence fenced as data, instructions inside it ignored by prompt | 🔜 untested |
+| SQL safety | No LLM-written SQL at all; fixed parametrised queries in a READ ONLY transaction | ✅ |
 
 ---
 
@@ -145,5 +142,6 @@ every change. Everything is containerised on Day 7 for deployment.
 
 - [Data flow](data-flow.md) — the byte-level path
 - [Storage](storage.md) — what lives where, and how vectors are stored
+- [API](api.md) — the contract, and what was built
 - [Database schema](../data/schema.md) — generated reference
 - [Decision records](../adr/) — why, and what was rejected

@@ -8,6 +8,7 @@ Generated from `results/runs.jsonl` by `analyst.evaluation`. Never edit by hand.
 
 | run | retriever | model | filters | R@1 | R@3 | R@5 | R@10 | MRR | pR@5 | p50 ms | bench | git |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| dense+expand[ctx]+router-bge-small-e617d46e | dense+expand[ctx]+router | `bge-small` | `ticker+year` | 0.182 | 0.250 | 0.386 | 0.455 | 0.257 | 0.409 | 129 | `2c4aedf3` | `d85d168-dirty` |
 | hybrid+expand[ctx]-bge-small-8cefefeb | hybrid+expand[ctx] | `bge-small` | `ticker+year` | 0.159 | 0.250 | 0.341 | 0.409 | 0.229 | 0.364 | 99 | `2c4aedf3` | `917bfe7-dirty` |
 | hybrid+expand[ctx]-bge-small-21b256e5 | hybrid+expand[ctx] | `bge-small` | `ticker+year` | 0.114 | 0.273 | 0.341 | 0.409 | 0.209 | 0.364 | 90 | `2c4aedf3` | `a715497-dirty` |
 | dense+expand[ctx]-bge-small-1ba71392 | dense+expand[ctx] | `bge-small` | `ticker+year` | 0.182 | 0.227 | 0.318 | 0.455 | 0.243 | 0.364 | 101 | `2c4aedf3` | `917bfe7-dirty` |
@@ -55,3 +56,4 @@ Where this flattens is the ceiling for anything that only reorders results.
 | dense+expand[ctx]-bge-small-f1b65882 | 0.182 | 0.318 | 0.455 | 0.636 | 0.795 | 0.841 | 1.000 |
 | hybrid+expand[ctx]-bge-small-21b256e5 | 0.159 | 0.341 | 0.455 | 0.614 | 0.795 | 0.864 | 0.977 |
 | dense+expand[strip]-bge-small-cc4276b5 | 0.045 | 0.045 | 0.091 | 0.204 | 0.409 | 0.523 | 0.727 |
+| dense+expand[ctx]+router-bge-small-e617d46e | 0.182 | 0.386 | 0.455 | 0.659 | 0.773 | 0.841 | 1.000 |
