@@ -87,7 +87,7 @@ citations, or an explicit refusal when evidence is insufficient.
 | FR-5.4 | Price queries cannot write | ✅ | No SQL from the LLM at all; fixed queries inside a `READ ONLY` transaction (no separate DB role) |
 | FR-5.5 | Price queries are bounded | 🔜 | One ticker per query (≤1,240 rows); **no statement timeout set** |
 | FR-5.6 | No LLM-authored SQL statement ever executes | ✅ | By construction: the LLM supplies a ticker and dates only (`tools.price_summary`) |
-| FR-5.7 | Describe figures and link each to its source page | 🔜 | `vision.py` built; full batch in notebook 16 |
+| FR-5.7 | Describe figures and link each to its source page | ✅ | All 418 triaged by kind (notebook 16), each keyed to its element and page; 16 indexed. Blank images are never sent to the model, and a description's numbers never verify an answer (`test_vision.py`, `test_agent.py`). The descriptions remain model-written and often weak ([ADR-010](../adr/0010-figures.md) Results) |
 | FR-5.8 | **All arithmetic is performed in Python, never by the model** | ✅ | `test_agent.py` growth tests; units applied only when printed in the evidence |
 
 ### 2.6 Answering

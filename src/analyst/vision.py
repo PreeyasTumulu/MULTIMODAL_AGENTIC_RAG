@@ -12,11 +12,15 @@ So a local vision model first says what KIND of image it is, and only the kinds
 that carry information are indexed. The model is not asked whether an image is
 "informative": gemma3:4b called a QR code and a CSR photo informative, while its
 `kind` label was right on all four samples.
+
+Measured after the full run: shown a blank image, the same model invents a chart,
+numbers included. So a blank image is never shown to it.
 """
 
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
 import pymupdf
 from sqlalchemy import select
 
@@ -27,11 +31,25 @@ from analyst.models import ElementRow, FigureDescription
 
 KEEP = ("chart", "table", "infographic", "diagram")  # the kinds that get indexed
 KINDS = (*KEEP, "photo", "logo", "qr_code", "decorative")
+BLANK = "blank"  # set by `is_blank`, never offered to the model
+BLANK_STD = 1.0  # largest per-channel pixel std-dev that still counts as one flat colour
 PROMPT = (
     "This image was extracted from an Indian listed company's annual report. Reply with a JSON "
     'object only: {"kind": one of ' + ", ".join(KINDS) + ', "description": at most 80 words - '
     "what it shows, with every label, year and number you can read, exactly as printed}"
 )
+
+
+def is_blank(path: Path) -> bool:
+    """One flat colour - a white box, a black mask - so there is nothing to read.
+
+    Measured (ADR-010): 12 of the 418 images fall under BLANK_STD, 11 perfectly flat and
+    one at 0.8. gemma3:4b called 8 of them a chart or diagram and invented revenue figures
+    for them. The next image up, at 1.8, it labelled decorative.
+    """
+    pix = pymupdf.Pixmap(str(path))
+    spread = np.frombuffer(pix.samples, np.uint8).reshape(-1, pix.n).std(axis=0)
+    return bool(spread.max() < BLANK_STD)
 
 
 def png(path: Path) -> bytes:
@@ -44,7 +62,9 @@ def png(path: Path) -> bytes:
 
 
 def describe(llm: LLM, path: Path) -> tuple[str, str]:
-    """(kind, description). An unrecognised kind counts as decorative: not indexed, not guessed."""
+    """(kind, description). A blank image is not sent; an unknown kind counts as decorative."""
+    if is_blank(path):
+        return BLANK, ""
     r = llm.complete(PROMPT, "Classify and describe this figure.", images=[png(path)])
     kind = str(r.data.get("kind") or "").strip().lower().replace(" ", "_")
     return (kind if kind in KINDS else "decorative"), str(r.data.get("description") or "")

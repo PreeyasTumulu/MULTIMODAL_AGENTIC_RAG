@@ -62,7 +62,7 @@ instead), and any read of `facts` by the agent (it is the evaluation oracle).
 | 4 | Indexing | Chunking with context prefixes, embeddings, Qdrant | ✅ [ADR-008](../adr/0008-contextual-chunk-prefixes.md) |
 | 5 | Retrieval | Dense + query expansion, metadata filters | ✅ [ADR-007](../adr/0007-retrieval-strategy.md) |
 | 6 | Answering | Route, extract, verify, compute, refuse | ✅ [ADR-009](../adr/0009-answer-generation.md) |
-| 7 | Figures | Vision triage by kind, described figures indexed | ✅ built · run in notebook 16 · [ADR-010](../adr/0010-figures.md) |
+| 7 | Figures | Vision triage by kind, blank images skipped, described figures indexed | ✅ 16 of 418 indexed · [ADR-010](../adr/0010-figures.md) |
 | 8 | Serving | FastAPI + Streamlit | ✅ verified in a browser |
 | 9 | Evaluation | Retrieval ledger + answer ledger, no LLM judge | ✅ |
 | 10 | Deployment | Docker, CI, AWS | 🔜 |

@@ -47,6 +47,28 @@ Found by live runs and fixed, each with a regression test:
 **Serving.** FastAPI (`analyst/api.py`) returns the agent's `Answer` model unchanged;
 Streamlit (`analyst/ui.py`) is a thin client of it. Verified end to end in a browser.
 
+**Figures: the full run, and what it caught.** Notebook 16 triaged all 418 extracted images
+with `gemma3:4b` ([ADR-010](adr/0010-figures.md)). Adding figure chunks to the index cost the
+benchmark nothing: R@1 to R@10, MRR and the recall curve to @200 are unchanged.
+
+But **the model invents charts for blank images.** 12 of the 418 files are one flat colour
+(white boxes, black masks). It called 8 of them a chart or diagram and wrote revenue series for
+them: "2018: 1200 … 2022: 2500", and the same "₹1,387.x / ₹1,633.68 Cr" for two companies.
+Those were 8 of the 24 indexed chunks, and one reached the agent's evidence for ICICI Bank's
+FY2025 revenue with numbers the verifier would have accepted.
+
+- `vision.is_blank` (every pixel channel's std-dev under 1) labels an image `blank` without a
+  model call. The cut is measured: it catches exactly those 12, and the next image up (1.8)
+  the model had labelled decorative.
+- The verifier no longer counts a number printed only in a `figure` chunk, and never cites one
+  as the source of a figure.
+- Re-run: 16 indexed, recall unchanged, and no benchmark question has a figure chunk in its
+  top-20 evidence. What remains is still model-written and often weak: a desk photo came back
+  as "circular charts and graphs".
+
+Caught by opening five images, not by a metric. Notebook 16's own qualitative look had hidden
+it: Sun Pharma's top "revenue trend chart" hits were the blank images.
+
 ### Added — the run ledger: measurements became records
 
 Every metric this project had produced lived inside a notebook output cell. Fine

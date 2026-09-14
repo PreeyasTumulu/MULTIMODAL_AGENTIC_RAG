@@ -24,10 +24,10 @@ LOOKUP = {"intent": "value_lookup", "tickers": ["SUNPHARMA"], "fiscal_years": [2
 Q = "What was Sun Pharma's net profit in FY2025?"
 
 
-def hit(text: str, fy: int = 2025, eid: str = "") -> Hit:
+def hit(text: str, fy: int = 2025, eid: str = "", kind: str = "table") -> Hit:
     eid = eid or f"E{fy}"
     return Hit(chunk_id=f"{eid}#0", element_ids=[eid], document_id=f"SUN-FY{fy}",
-               ticker="SUNPHARMA", fiscal_year=fy, pages=[7], type="table", text=text, score=0.9)
+               ticker="SUNPHARMA", fiscal_year=fy, pages=[7], type=kind, text=text, score=0.9)
 
 
 def said(figure: str, unit: str | None = None) -> dict[str, object]:
@@ -79,6 +79,21 @@ def test_a_figure_left_in_the_sentence_is_still_verified_and_cited_precisely() -
     assert a.values == ["109,290"]
     assert [c.element_ids for c in a.citations] == [["E2025"]]  # only the block printing it
     assert str(a.answer).endswith("does not state the unit)")  # no unit printed: said so
+
+
+def test_a_figure_printed_only_in_a_figure_description_is_refused() -> None:
+    """Regression (ADR-010): a vision model described a blank image as a revenue chart,
+    numbers included. Model-written text must never make a figure count as printed."""
+    bad = said("109,290")
+    a = ask(Q, Script(LOOKUP, bad, bad), tools([hit("Net profit 109,290", kind="figure")]))
+    assert (a.abstained, a.abstain_reason, a.values) == (True, "not_grounded", [])
+
+
+def test_a_figure_description_is_never_cited_as_the_source_of_a_figure() -> None:
+    reply = {"answer": "Net profit was 109,290.", "value": "109,290", "sources": [1, 2]}
+    a = ask(Q, Script(LOOKUP, reply), tools([hit("Chart 109,290", kind="figure", eid="FIG"),
+                                             hit("Net profit for the year | 109,290")]))
+    assert a.values == ["109,290"] and [c.element_ids for c in a.citations] == [["E2025"]]
 
 
 GROWTH = {"intent": "growth", "tickers": ["SUNPHARMA"], "fiscal_years": [2024, 2025],

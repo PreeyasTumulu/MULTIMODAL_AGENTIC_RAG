@@ -49,7 +49,7 @@ arithmetic. Anything that fails the check is refused.
 |---|---|
 | Prices + reported financials | 12 companies, 4 sectors (TCS, INFY, WIPRO · HDFCBANK, ICICIBANK, BAJFINANCE · RELIANCE, NTPC, ONGC · SUNPHARMA, DRREDDY, CIPLA) |
 | Annual reports parsed and indexed | **6 reports, 4 companies:** HDFC Bank FY25, ICICI Bank FY24–25, Reliance FY25, Sun Pharma FY24–25 — 2,056 pages, 46,241 elements |
-| Figures extracted | 418 images, triaged by a local vision model |
+| Figures extracted | 418 images, triaged by a local vision model; 16 indexed as evidence |
 
 TCS and Infosys block scripted downloads; their reports are a manual step. Scope lives in
 [`configs/companies.yaml`](configs/companies.yaml) and
@@ -168,8 +168,10 @@ retrieved and cited. The small model reads the wrong cell. A Groq
   digits cannot be verified, so they are refused.
 - Figures are checked against chunk text held in the Qdrant payload — a verbatim copy of
   the database text, but not re-read from Postgres.
-- **Vector-drawn charts are not extracted at all**, and figure descriptions are written by a
-  vision model, not quoted from the report.
+- **Vector-drawn charts are not extracted at all.** Figure descriptions are written by a
+  vision model, not quoted from the report, and shown a blank image that model invented a
+  revenue chart with numbers. Blank images are now skipped, and a number found only in a
+  description can never verify an answer, but the descriptions themselves are still unreliable.
 - Financial data comes from Yahoo Finance, a *normalisation* of the filed statements. The
   benchmark generator discards facts it cannot locate in the source document, so
   disagreements reduce coverage rather than corrupt the metrics.

@@ -302,6 +302,10 @@ def _verify(data: Mapping[str, object], hits: Sequence[Hit], need_value: bool
     Figures under MIN_DIGITS cannot be verified and are therefore refused - the
     same rule the benchmark generator applies to the oracle.
 
+    "Printed" means the filing's own text. A `figure` chunk is a vision model's
+    description, so its numbers never count: on blank images the model invented
+    revenue charts, numbers included (ADR-010).
+
     The figure comes from `value`, or from the sentence when `value` is empty:
     llama3.2 routinely wrote "67,347.4 crore" into `answer` and left `value` null.
     That is a formatting slip, not a grounding failure, and it is checked the same.
@@ -312,14 +316,15 @@ def _verify(data: Mapping[str, object], hits: Sequence[Hit], need_value: bool
     if not data.get("answer"):
         return "insufficient_evidence"
     shown = [hits[i - 1] for i in _ints(data.get("sources")) if 0 < i <= len(hits)]
+    filed = [h for h in shown if h.type != "figure"]
     stated, said = _claims(str(data.get("value") or "")), _claims(str(data["answer"]))
     figure = next(iter(stated or said), None) if need_value else None
-    printed = {f for h in shown for f in figures(h.text)}
+    printed = {f for h in filed for f in figures(h.text)}
     if not shown or (need_value and figure is None) or not {*stated, *said} <= printed:
         return "not_grounded"
     # Cite what actually prints the figure, once per element - not every block listed.
-    keep = {h.element_ids[0]: h for h in shown if figure is None or figure in figures(h.text)}
-    return list(keep.values()), figure
+    source = shown if figure is None else [h for h in filed if figure in figures(h.text)]
+    return list({h.element_ids[0]: h for h in source}.values()), figure
 
 
 def _call(llm: Chat, a: Answer, step: str, system: str, user: str) -> Mapping[str, object]:

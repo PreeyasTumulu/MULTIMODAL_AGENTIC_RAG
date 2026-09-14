@@ -72,8 +72,8 @@ testpaths = ["tests"]
 addopts = "-q --strict-markers"
 
 # pymupdf ships no type stubs, so every call into it reads as untyped. Relaxing
-# the rule for the two modules that touch it keeps strict mode everywhere else
-# rather than weakening the whole project.
+# the rule for the modules that touch it (tests/ is not a package, hence the bare
+# name) keeps strict mode everywhere else rather than weakening the whole project.
 [[tool.mypy.overrides]]
-module = ["analyst.parsing", "analyst.vision"]
+module = ["analyst.parsing", "analyst.vision", "test_vision"]
 disallow_untyped_calls = false

@@ -2,7 +2,7 @@
 
 > **Generated file — do not edit by hand.**
 > Regenerate by running `notebooks/10_generate_docs.ipynb`.
-> Last generated: 2026-09-06
+> Last generated: 2026-09-13
 
 PostgreSQL 17, reached on host port **5433**. Schema changes are applied through Alembic migrations, never `create_all()`.
 
@@ -14,6 +14,7 @@ erDiagram
     documents ||--o{ elements : has
     companies ||--o{ facts : has
     companies ||--o{ prices : has
+    elements ||--o{ figure_descriptions : has
     companies {
         varchar ticker PK
         varchar name
@@ -66,6 +67,13 @@ erDiagram
         numeric close
         numeric adj_close
         bigint volume
+    }
+    figure_descriptions {
+        varchar element_id PK
+        varchar model
+        varchar kind
+        text description
+        timestamptz created_at
     }
 ```
 
@@ -215,5 +223,23 @@ erDiagram
 
 - Rows with a NaN close are dropped before insert - see `prices.drop_partial_bar`.
 - `UNIQUE (ticker, trade_date)` is what makes re-ingestion idempotent.
+
+---
+
+## `figure_descriptions`
+
+**  — currently **418 rows**
+
+| Column | Type | Null | Key | Default |
+|---|---|---|---|---|
+| `element_id` | varchar(120) | no | PK FK→elements.element_id |  |
+| `model` | varchar(80) | no |  |  |
+| `kind` | varchar(20) | no |  |  |
+| `description` | TEXT | no |  |  |
+| `created_at` | timestamptz | no |  | `now()` |
+
+**Constraints and indexes**
+
+- `INDEX ix_figure_descriptions_kind` on `kind`
 
 ---

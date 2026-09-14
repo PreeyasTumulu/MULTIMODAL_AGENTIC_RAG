@@ -63,7 +63,7 @@ uv run jupyter nbconvert --to notebook --execute --inplace \
   --ExecutePreprocessor.timeout=3600 notebooks/07_index_chunks.ipynb
 ```
 
-**Currently carrying outputs:** 06–15. **01-05 have never
+**Currently carrying outputs:** 06–16. **01-05 have never
 been executed with outputs saved** — they are the acquisition and parsing steps, and
 running them re-downloads and re-parses the corpus. That is the one remaining gap.
 
