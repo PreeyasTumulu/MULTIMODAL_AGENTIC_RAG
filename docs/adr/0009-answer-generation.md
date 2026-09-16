@@ -1,6 +1,6 @@
 # ADR-009: Answer generation — the LLM points, Python verifies
 
-- **Status:** Proposed — accepted once the baseline and a Groq run are in `results/answers.md`
+- **Status:** Accepted
 - **Date:** 2026-09-12
 - **Follows** [ADR-002](0002-llm-provider-stack.md) (providers), [ADR-003](0003-provenance-schema.md)
   (provenance), [ADR-008](0008-contextual-chunk-prefixes.md) (the index it reads)
@@ -104,6 +104,10 @@ fiscal year, and investment advice.
   refused. That is the rule the oracle already follows.
 - Citations are narrowed by Python to the evidence blocks that actually print the figure,
   not every block the model listed.
+- **`cited_expected` does not separate "retrieval never found the anchor" from "a
+  plausible wrong-table figure passed the tolerant numeric check."** Both show up as
+  `cited_expected=False`. Telling them apart needs a per-question diff against the
+  retrieval ledger's ranks, not the answer ledger alone — not built for v1.
 
 ## Results
 
@@ -151,5 +155,37 @@ disagreed with the labels, mostly `Operating Revenue` read as `Total Revenue`, w
 overlap. ⚠️ The benchmark questions are **templated**, so this is still an easy test for a
 router. Paraphrased questions would be the honest next test.
 
-_Pending before Accepted: the same run on Groq (`openai/gpt-oss-120b`), which needs a
-`GROQ_API_KEY`._
+### Groq `openai/gpt-oss-120b`, k=10, bench `2c4aedf3` (same bench as baseline)
+
+| metric | value |
+|---|---|
+| accuracy, 44 answerable | **0.386** (17) |
+| value lookups / growth | 0.382 (13 of 34) / 0.400 (4 of 10) |
+| **wrong answer** (answered, incorrect) | **0.614** (27) |
+| false refusal | **0.000** (0) |
+| refusal, 16 generated unanswerable | **1.000** (16) |
+| a citation names the benchmark anchor | 0.295 |
+| LLM calls / tokens per question | 1.9 / 2,594 |
+| latency p50 | 5.5 s — 60 questions in 812 s |
+
+**Reading it.**
+
+- **Accuracy nearly doubled (0.227 → 0.386) and false refusal went to zero.** The 9
+  questions llama3.2 falsely refused were all attempted this time: 4 came back correct,
+  5 wrong. Nothing about the retrieval or verification pipeline changed between runs —
+  only the model doing the routing and extraction did.
+- **Reading errors did not go away, they concentrated.** Of the 27 wrong answers, 5 had
+  the correct anchor element retrieved *and* cited — all 5 are Sun Pharma questions
+  (`TotalRevenue`, `StockholdersEquity`, `TotalExpenses`, and both growth pairs). The
+  other 22 wrong answers cited a different element than the benchmark anchor: either a
+  genuine retrieval miss, or (per the tolerant numeric match) a plausible-looking figure
+  from the wrong table that the verifier accepted. This run does not distinguish the two;
+  see Consequences below.
+- **calls/tokens per question dropped slightly versus llama3.2** (1.9 vs 2.1 calls, 2,594
+  vs 2,909 tokens) — `gpt-oss-120b`'s hidden reasoning tokens, the pre-run concern, did
+  not inflate usage. The full 60-question run used ~156K of Groq's 200K-token daily
+  budget.
+- **wrong_answer rose in relative terms (0.568 → 0.614)** only because false refusals
+  fell to zero and were reclassified as attempts — in raw counts, wrong answers rose by
+  just 2 (25 → 27) while correct answers rose by 7 (10 → 17). Read the pair together, not
+  either number alone.

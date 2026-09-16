@@ -147,13 +147,14 @@ questions) and a cross-encoder reranker (R@5 fell from 0.318 to 0.204).
 | LLM | accuracy | wrong | false refusal | refusal of unanswerable | calls / question | p50 |
 |---|---|---|---|---|---|---|
 | local `llama3.2` (3B) | 0.227 | **0.568** | 0.205 | **1.000** | 2.1 | 4.6 s |
+| Groq `openai/gpt-oss-120b` | **0.386** | 0.614 | **0.000** | **1.000** | 1.9 | 5.5 s |
 
 Every figure shown was printed on its cited page, and every unanswerable question was
-refused. But 25 of 44 answers were **real figures from the wrong line** — standalone
-instead of consolidated, a neighbouring row — and in 9 of those the right table was
-retrieved and cited. The small model reads the wrong cell. A Groq
-(`openai/gpt-oss-120b`) run is the next measurement. See
-[ADR-009](docs/adr/0009-answer-generation.md).
+refused, on both models. Moving to the larger hosted model **nearly doubled accuracy and
+eliminated false refusal** — the 9 questions llama3.2 falsely refused were all attempted
+by Groq (4 correct, 5 wrong). Reading errors didn't disappear, they concentrated: of the
+27 wrong Groq answers, 5 had the right table retrieved and cited and are all Sun Pharma
+questions. See [ADR-009](docs/adr/0009-answer-generation.md) for the full breakdown.
 
 ---
 

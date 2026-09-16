@@ -15,19 +15,25 @@ only if that figure is printed in the evidence the model cited. Arithmetic runs 
 Python; anything unverifiable is refused. Plain Python, no agent framework —
 [ADR-009](adr/0009-answer-generation.md).
 
-Baseline on local `llama3.2` (3B): 44 benchmark questions plus 16 generated
-unanswerable ones ([`results/answers.md`](../results/answers.md)).
+44 benchmark questions plus 16 generated unanswerable ones, on local `llama3.2` (3B)
+and on Groq `openai/gpt-oss-120b` ([`results/answers.md`](../results/answers.md)):
 
-| accuracy | wrong | false refusal | refusal (unanswerable) | calls / tokens per question | p50 |
-|---|---|---|---|---|---|
-| 0.227 | **0.568** | 0.205 | **1.000** | 2.1 / 2,909 | 4.6 s |
+| LLM | accuracy | wrong | false refusal | refusal (unanswerable) | calls / tokens per question | p50 |
+|---|---|---|---|---|---|---|
+| local `llama3.2` (3B) | 0.227 | **0.568** | 0.205 | **1.000** | 2.1 / 2,909 | 4.6 s |
+| Groq `openai/gpt-oss-120b` | **0.386** | 0.614 | **0.000** | **1.000** | 1.9 / 2,594 | 5.5 s |
 
 - **Grading needs no LLM judge.** Every answer is a number with a known true value:
   the figure counts at any printed scale (exactly how notebook 06 located it), a
   growth rate within 1 point.
-- **The verifier stops invented figures, not misread ones.** 25 answers were real
+- **The verifier stops invented figures, not misread ones.** llama3.2 gave 25 real
   figures from the wrong line, and in 9 of them the right table was retrieved and
-  cited. That is the case for measuring a larger model next, not a better retriever.
+  cited — the case for measuring a larger model. Measured: Groq nearly doubled
+  accuracy and drove false refusal to zero (the 9 questions llama3.2 falsely refused
+  were all attempted — 4 correct, 5 wrong). Wrong-table reading errors didn't go
+  away, they concentrated: of 27 wrong Groq answers, 5 had the right table retrieved
+  and cited, and all 5 are Sun Pharma questions. See
+  [ADR-009](adr/0009-answer-generation.md).
 - **The "benchmark labels" worry, measured.** Retrieval driven by the router's output
   instead of the benchmark's stored labels is within about one question at every
   depth: R@5 0.386 vs 0.318, @50 0.773 vs 0.795, @200 1.000 for both.
