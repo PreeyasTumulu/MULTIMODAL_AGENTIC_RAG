@@ -35,6 +35,53 @@ frontend": the project is meant to be shown, and Streamlit did not show it well.
   Limitations), and a value answer can keep a unit the page does not print
   ("2,714,714.90 million (as printed; the cited page does not state the unit)").
 
+### Day 7 addendum — private document uploads: "chat with your PDF", verified the same way
+
+**Beside the measured corpus, upload a PDF and ask about it** — answered by the same
+point-then-verify pipeline, not a plain chat-with-PDF path. Uploads get their own Qdrant
+collection (`elements_uploads_bge-small`), a `Document.source` discriminator so
+`load_corpus()`/`load_chunks()` never see them, and a content-addressed id
+(`upload-{sha256[:16]}`) so re-uploading the same bytes is idempotent.
+
+- **`src/analyst/uploads.py`:** save/dedupe, a background job under a lock (one document
+  processed at a time), a `queued → parsing → indexing → ready|failed` status machine with
+  live progress, and a `resume()` that finishes anything a restart interrupted — wired into
+  FastAPI's `lifespan` hook so it runs in a background thread at startup. Rejects: not a
+  PDF, over 50 MB, over 1,000 pages, password-protected, damaged, or no text layer (a
+  scanned PDF — OCR is not supported and the message says so).
+- **`agent.ask_document()`:** the same Retrieve → Extract → Verify → Compute shape as
+  corpus mode, minus the Route step (nothing to route to) and growth maths (needs two
+  documents). `TitleContext` gives an upload's chunks a title prefix instead of a
+  company/fiscal-year one.
+- **API:** `POST/GET /api/v1/documents`, `GET/DELETE /api/v1/documents/{id}`, and
+  `POST /api/v1/ask` gains `document_id` — all behind `X-API-Key` (`private()`,
+  constant-time compare). An upload's `/elements` and `/figures` return **404, not 401**,
+  without the key — the document's existence is private too, not just its content. See
+  [API — private document uploads](architecture/api.md#private-document-uploads).
+- **Web app:** `/login` (an HMAC-signed session cookie derived from `ADMIN_API_KEY` — the
+  browser never holds the raw key), `/documents` (drag-and-drop, live upload progress via
+  `XMLHttpRequest` since `fetch` cannot report it, 2-second polling while anything is
+  active, delete with a confirm), and the Analyst gained a document scope selector
+  (`?doc=`) alongside the existing `?q=`.
+- **Found and fixed by testing, not by the user:** a bare "don't hallucinate" instruction
+  in the extraction prompt was not enough — asked an off-topic question ("market share?")
+  against a retrieved evidence block containing an unrelated but real figure (profit after
+  tax), the model answered with that figure instead of declining. The verifier could not
+  have caught this: the number really is printed. Fixed with a worked example in the
+  prompt (`agent.DOC_EXTRACT`); verified interactively before and after the fix, then again
+  after a full server restart. Recorded as a limitation, not claimed as solved — this is a
+  prompt fix, not a structural guarantee.
+- **Verified end to end**, in a browser, twice — once against the dev servers and again
+  after rebuilding both Docker images: sign in, upload a PDF (a synthetic multi-line
+  financial statement, not the real corpus), watch it index, ask a question, open the
+  cited source and see the value highlighted in place, see a scanned PDF fail with its
+  reason shown, delete a document (removes the Postgres row, the Qdrant points, and the
+  file on disk — all three checked), sign out, and confirm the anonymous view shows only a
+  sign-in link with no upload UI. In Docker: the upload lands in the bind-mounted
+  `data/uploads/`, the containerised API reaches the host's Ollama via
+  `host.docker.internal`, and the public corpus `/ask` is unaffected throughout.
+- **115 tests** (+10), mypy strict clean (42 files), ruff clean.
+
 ### Day 6 — from chunks to answers: agent, verifier, API
 
 **The system now answers.** `analyst.agent` routes a question, retrieves with the

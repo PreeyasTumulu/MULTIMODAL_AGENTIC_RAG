@@ -18,6 +18,7 @@ const decisions = [
   ["Context beat bigger models", "Prefixing chunks with company and year took Recall@5 from 0.068 to 0.318. Three larger embedding models moved two questions.", adr("0008", "contextual-chunk-prefixes")],
   ["Rejected: a cross-encoder reranker", "It lowered Recall@5 from 0.318 to 0.204 and cost ~44× the latency — a web-trained reranker does not read grids of numbers.", adr("0007", "retrieval-strategy")],
   ["Figures are triaged before they are trusted", "A small vision model invented charts for blank images, so blank images are skipped and numbers in a description can never verify an answer.", adr("0010", "figures")],
+  ["Private uploads get the same verification, not a shortcut", "A PDF you upload is chunked into its own index and answered by the same point-then-verify pipeline as the measured corpus — never a plainer \"just generate\" path.", repoFile("src/analyst/uploads.py")],
   ["Prices through fixed, read-only queries", "The model supplies a ticker and dates, never SQL, and every query runs in a READ ONLY transaction.", repoFile("src/analyst/tools.py")],
   ["Plain Python orchestration", "Route, retrieve, extract, verify and compute are ordinary functions — no agent framework to hide control flow.", repoFile("src/analyst/agent.py")],
 ];
@@ -41,6 +42,7 @@ const limits = [
   "Vector-drawn charts are not extracted, and vision-model figure descriptions remain unreliable.",
   "The local 3B model routes relative dates (\"last year\") unreliably, so price answers can use the wrong window. Prices are not in the benchmark.",
   "Financials come from Yahoo Finance, a normalisation of the filed statements.",
+  "In document mode, the verifier can accept a real printed figure that answers a different question than the one asked — a worked example in the prompt reduces this, measured on one case, but it is a prompt fix, not a structural guarantee.",
 ];
 
 const th = "px-4 py-3 text-left font-medium";
@@ -151,6 +153,25 @@ export default function MethodologyPage() {
           Every figure shown was printed on its cited page, on both models. The larger model nearly
           doubled accuracy and removed false refusals. Of its 27 wrong answers, 5 cited the right
           table and misread it — all Sun Pharma questions.
+        </p>
+      </section>
+
+      <section className="mt-16">
+        <h2 className="font-display text-3xl">Private documents</h2>
+        <p className="mt-2 max-w-3xl text-ink-2">
+          Beside the measured corpus above, you can upload your own PDF and ask about it —
+          answered by the same pipeline, not a shortcut. The document is chunked into its own
+          index, so retrieval never mixes it with the indexed reports. Asking it skips Route
+          entirely (there is only one document to search) and goes straight to Extract →
+          Verify → Compute. It has no growth maths across documents, no figures, and no OCR
+          for scanned pages. The whole surface — upload, ask, delete, even an uploaded page&apos;s
+          existence — is private to whoever holds the deployment&apos;s access key.
+        </p>
+        <p className="mt-3 max-w-3xl text-sm text-ink-2">
+          A worked example had to be added to the extraction prompt after live testing showed
+          the model would answer an off-topic question with an unrelated but genuinely printed
+          figure from the retrieved evidence — the verifier cannot catch this, since the number
+          really is on the page. See it in <Link href="/documents" className="text-brand hover:underline">Documents</Link>.
         </p>
       </section>
 

@@ -50,6 +50,14 @@ retry does not need a graph framework), a cross-encoder reranker (measured and
 rejected, [ADR-007](../adr/0007-retrieval-strategy.md)), LLM-written SQL (fixed queries
 instead), and any read of `facts` by the agent (it is the evaluation oracle).
 
+**A second, parallel path (Day 7): private document uploads.** A user uploads a PDF
+(`POST /api/v1/documents`, key-gated); it is parsed and chunked the same way as the
+corpus, but embedded into its own Qdrant collection (`elements_uploads_bge-small`),
+never mixed with the indexed reports. Asking with a `document_id` skips the Route step
+entirely — there is only one document to search — and goes straight to the same
+Retrieve → Extract → Verify → Compute pipeline. No growth math, no figures, no OCR.
+Details: [API — private document uploads](api.md#private-document-uploads).
+
 ---
 
 ## Subsystems
@@ -65,7 +73,8 @@ instead), and any read of `facts` by the agent (it is the evaluation oracle).
 | 7 | Figures | Vision triage by kind, blank images skipped, described figures indexed | ✅ 16 of 418 indexed · [ADR-010](../adr/0010-figures.md) |
 | 8 | Serving | FastAPI + Next.js web app (`frontend/`, replaced Streamlit on Day 7) | ✅ verified in a browser, dev and Docker |
 | 9 | Evaluation | Retrieval ledger + answer ledger, no LLM judge | ✅ |
-| 10 | Deployment | Docker Compose (API + web app) ✅ · CI, AWS | 🔜 |
+| 10 | Private document uploads | Upload a PDF, ask it directly — own Qdrant collection, key-gated, same verify-then-refuse pipeline | ✅ Day 7 · `src/analyst/uploads.py` |
+| 11 | Deployment | Docker Compose (API + web app) ✅ · CI, AWS | 🔜 |
 
 ---
 

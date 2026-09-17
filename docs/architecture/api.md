@@ -1,11 +1,13 @@
 # API specification
 
-**Status:** ✅ **Built (Day 6)** in `src/analyst/api.py`: `POST /api/v1/ask`,
+**Status:** ✅ **Built (Day 6-7)** in `src/analyst/api.py`: `POST /api/v1/ask`,
 `GET /api/v1/companies`, `GET /api/v1/elements/{element_id}`,
-`GET /api/v1/figures/{element_id}`, `GET /health`.
-🔜 **Not built:** `/ask/stream`, `/documents`, API-key auth, rate limiting, and the
-uniform error envelope — FastAPI's default `{"detail": ...}` is returned, with **422**
-(not 400) for validation errors.
+`GET /api/v1/figures/{element_id}`, `GET /health`, and — Day 7 — private document
+uploads: `POST/GET /api/v1/documents`, `GET/DELETE /api/v1/documents/{document_id}`,
+`POST /api/v1/ask` with `document_id`, all behind `X-API-Key`.
+🔜 **Not built:** `/ask/stream`, rate limiting, and the uniform error envelope —
+FastAPI's default `{"detail": ...}` is returned, with **422** (not 400) for
+validation errors.
 
 This document was written first as the target shape. **Where it and the code
 differ, [As built](#as-built) below is the truth.**
@@ -32,14 +34,19 @@ differ, [As built](#as-built) below is the truth.**
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/v1/ask` | Ask a question, get a cited answer |
+| `POST` | `/api/v1/ask` | Ask a question, get a cited answer — `document_id` set answers from one private upload instead of the corpus |
 | `POST` | `/api/v1/ask/stream` | Same, streamed as Server-Sent Events |
 | `GET` | `/api/v1/companies` | List the corpus |
-| `GET` | `/api/v1/documents` | List source documents |
-| `GET` | `/api/v1/elements/{element_id}` | Resolve a citation |
-| `GET` | `/api/v1/figures/{element_id}` | Fetch a figure image |
+| `POST` | `/api/v1/documents` 🔒 | Upload a PDF for private document mode |
+| `GET` | `/api/v1/documents` 🔒 | List your uploads and their status |
+| `GET` | `/api/v1/documents/{document_id}` 🔒 | One upload's status |
+| `DELETE` | `/api/v1/documents/{document_id}` 🔒 | Remove an upload — vectors, elements and the file |
+| `GET` | `/api/v1/elements/{element_id}` | Resolve a citation — 🔒 (404, not 401) if it belongs to an upload |
+| `GET` | `/api/v1/figures/{element_id}` | Fetch a figure image — same 🔒 rule |
 | `GET` | `/health` | Liveness + dependency status |
 | `GET` | `/docs` | OpenAPI UI (FastAPI built-in) |
+
+🔒 = requires `X-API-Key`; see [Private document uploads](#private-document-uploads).
 
 ---
 
@@ -210,6 +217,78 @@ partially shown and then retracted.
 
 ---
 
+## Private document uploads
+
+A "chat with your PDF" mode, added Day 7: upload a document, then `POST /api/v1/ask`
+with its `document_id` answers only from that document — routed straight to retrieval
+(no company/year router step, since there is only one document to search), through the
+same extract → verify → decline pipeline as the corpus. No growth math and no figures:
+uploads are text and tables only, chunked into their own Qdrant collection
+(`elements_uploads_bge-small`), never mixed with the indexed corpus.
+
+**This whole surface is private**, gated by one shared secret in `X-API-Key`, compared
+with `secrets.compare_digest` so response timing leaks nothing:
+
+| Response | When |
+|---|---|
+| `503` | `ADMIN_API_KEY` is not set on the server — uploads are switched off, not just locked |
+| `401` | Set, but the header is missing or wrong |
+| `404` on `/elements/{id}` and `/figures/{id}` | The element belongs to an upload and the key is missing/wrong — **existence-hiding**: a private document's pages don't exist without the key, they aren't merely forbidden |
+
+### `POST /api/v1/documents` — upload
+
+`multipart/form-data`: `file` (the PDF) and an optional `title` (else derived from the
+filename). Returns **202** immediately with the row in `status: "queued"`; parsing and
+indexing run as a background task, polled via the `GET` below.
+
+```jsonc
+{ "document_id": "upload-be195bcd8925b2b2", "title": "Nimbus Solar investor update FY2026",
+  "status": "queued", "progress": 0.0, "pages": null, "chunks": null,
+  "size_bytes": 7686, "error": null, "uploaded_at": "2026-09-17T15:25:48Z" }
+```
+
+`document_id` is content-addressed (`sha256(bytes)[:16]`), so uploading the same bytes
+twice returns the existing row instead of reprocessing — except a **failed** upload,
+which re-queues on the next identical upload, since re-uploading is also how a user retries.
+
+Rejected before queueing: over 50 MB (`413`), not a PDF (`415` — checked by magic bytes,
+not the filename or `Content-Type`). Rejected during processing (row moves to
+`status: "failed"` with `error` set, not an HTTP error — the client already has a 202):
+password-protected or damaged, over 1,000 pages, or no text layer (a scanned PDF; OCR is
+not supported, so it fails with a message that says so).
+
+### `GET /api/v1/documents` / `GET /api/v1/documents/{document_id}` — status
+
+`status` moves `queued → parsing → indexing → ready | failed`; `progress` is `0.0..1.0`
+while active. The web app polls every 2 seconds while any document is active. A server
+restart resumes any document caught mid-job, oldest first (`uploads.resume`, run from the
+FastAPI `lifespan` hook in a background thread).
+
+### `DELETE /api/v1/documents/{document_id}`
+
+**204** on success: deletes the Postgres row (and its elements, by FK cascade), the
+Qdrant points, and the file on disk. **409** if the document is still `parsing` or
+`indexing` — deleting mid-job would race the job recreating what was just removed, so
+the client is asked to wait and retry. **404** for an unknown id.
+
+### `POST /api/v1/ask` with `document_id`
+
+Same request/response shape as corpus mode. Additional checks: `404` if the id is
+unknown, `409` if it is `failed` (with the stored `error`) or still processing.
+`abstain_reason` is the same enum as corpus mode; document mode never returns
+`out_of_corpus` (there is no company/year to be out of).
+
+⚠️ **A known limitation, not caught by the verifier by construction:** the verifier only
+checks that a cited figure is printed on its page — it cannot tell that figure is the
+*wrong* figure for the question asked. An early version of the document-mode prompt let
+the model answer an off-topic question ("market share?") with an unrelated but genuinely
+printed figure (profit after tax) from the retrieved evidence. Fixed with a worked
+example in the prompt (`agent.DOC_EXTRACT`), verified by direct testing before and after —
+but the fix is a prompt change, not a structural guarantee, so a determined off-topic
+question could still surface a real, wrongly-cited number.
+
+---
+
 ## Read endpoints
 
 ### `GET /api/v1/companies`
@@ -273,13 +352,18 @@ An **upstream LLM rate limit** is reported as `503 dependency_unavailable`, not
 `429` — the client did nothing wrong, and the distinction matters given the free
 tiers this runs on.
 
+As built, document uploads also use `413` (file too large), `415` (not a PDF), `401`
+(missing/wrong key), and `409` (delete or ask while a document is still processing, or
+ask a `failed` one) — all still FastAPI's plain `{"detail": "..."}`, not the envelope
+above.
+
 ---
 
 ## Cross-cutting
 
 | Concern | Approach |
 |---|---|
-| Auth | API key in `X-API-Key`. Single key for v1 — there are no users to isolate. |
+| Auth | Corpus endpoints are open (public deploy, no accounts). `X-API-Key` gates only document uploads and their private elements/figures — single key, no users to isolate, off entirely if `ADMIN_API_KEY` is unset. |
 | Rate limiting | Per-key token bucket, sized under the LLM provider's own daily quota |
 | Request budget | Hard timeout; partial work is discarded rather than returned |
 | Validation | Pydantic v2 models; FastAPI generates OpenAPI from them |

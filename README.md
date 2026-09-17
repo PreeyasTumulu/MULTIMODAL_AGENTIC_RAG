@@ -20,10 +20,10 @@ arithmetic. Anything that fails the check is refused.
 | "How has Reliance Industries traded over the last year?" | Fixed read-only price query → change computed in Python |
 | "Should I buy HDFC Bank shares?" · "TCS's net profit in FY2025?" | Refused: advice / no TCS filing is indexed |
 
-> **Status: Day 7.** Retrieval, answering, figure triage, the API and the **Pramaan** web
-> app ([`frontend/`](frontend/)) are built and run under Docker Compose. CI and cloud
-> deployment are not. This README claims only what is built and measured — see
-> [Results](#results) and [Limitations](#limitations).
+> **Status: Day 7.** Retrieval, answering, figure triage, the API, the **Pramaan** web
+> app ([`frontend/`](frontend/)) and private document uploads are built and run under
+> Docker Compose. CI and cloud deployment are not. This README claims only what is
+> built and measured — see [Results](#results) and [Limitations](#limitations).
 
 ---
 
@@ -61,6 +61,20 @@ notebooks; `results/` (the measurements) is committed.
 
 ---
 
+## Private document uploads
+
+Beside the measured corpus above, upload your own PDF and ask about it — a
+"chat with your PDF" mode, verified the same way: the model points at a figure, Python
+checks it is printed on the cited page, and refuses otherwise. Uploads are parsed and
+embedded into their own Qdrant collection, never mixed with the indexed reports, and
+the whole surface — upload, list, ask, delete, and even an uploaded page's existence —
+is private to whoever holds `ADMIN_API_KEY` (set it in `.env`; unset, the feature is
+switched off, not just locked). Text and tables only: no figures, no OCR, no growth
+maths across two documents. See
+[API — private document uploads](docs/architecture/api.md#private-document-uploads).
+
+---
+
 ## Quickstart
 
 Requires Python 3.12+, [uv](https://docs.astral.sh/uv/), Docker, and
@@ -92,7 +106,9 @@ npm --prefix frontend run dev -- -p 3300
 ```
 
 To answer with Groq instead, set `LLM_PROVIDER=groq`, `LLM_MODEL=openai/gpt-oss-120b` and
-`GROQ_API_KEY` in `.env`.
+`GROQ_API_KEY` in `.env`. To turn on private document uploads, set `ADMIN_API_KEY` in
+`.env` (`python -c "import secrets; print(secrets.token_urlsafe(24))"`) and sign in with
+it at `/login` in the web app; unset, uploads are switched off entirely.
 
 The pipeline is a numbered set of notebooks — see
 **[`notebooks/README.md`](notebooks/README.md)**. All reusable logic lives in
@@ -191,6 +207,12 @@ questions. See [ADR-009](docs/adr/0009-answer-generation.md) for the full breakd
   disagreements reduce coverage rather than corrupt the metrics.
 - Not investment advice. The system retrieves and computes over public filings; it refuses
   requests for recommendations.
+- **The verifier cannot catch a real figure that answers the wrong question**, only an
+  unprinted one. An early document-mode prompt let the model answer an off-topic question
+  with an unrelated but genuinely printed figure from the retrieved evidence; a worked
+  example in the prompt fixed the measured case, but this is a prompt fix, not a structural
+  guarantee. Document mode also has no growth maths, no figures, and processes one upload
+  at a time.
 
 ---
 
@@ -204,7 +226,7 @@ questions. See [ADR-009](docs/adr/0009-answer-generation.md) for the full breakd
 | 4 | Embedding sweep, hybrid retrieval, query expansion, reranking — measured | done |
 | 5 | Contextual chunk prefixes: R@5 0.068 → 0.318 | done |
 | 6 | Agent + verifier, answer evaluation (llama3.2 + Groq), figure triage, FastAPI + Streamlit | done |
-| 7 | Next.js web app (replaces Streamlit), Docker images + Compose | done — verified in a browser |
+| 7 | Next.js web app (replaces Streamlit), Docker images + Compose, private document uploads | done — verified in a browser and in Docker |
 | 8 | CI, AWS deployment | not started |
 
 The web app is a thin client of the same API contract. It calls the API only from its
