@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* Theme = the data-theme attribute set by the inline script in layout.tsx. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Semantic tokens only - components never name a raw colour, so both themes stay in step.
+   brand doubles as the "verified" colour; warn is reserved for declined answers. */
+:root {
+  --bg: #f7f6f1;
+  --surface: #ffffff;
+  --sunken: #efede6;
+  --line: #e3e0d6;
+  --line-strong: #cfcbbf;
+  --ink: #16160f;
+  --ink-2: #45443b;
+  --muted: #67655b;
+  --brand: #0b7a63;
+  --brand-ink: #ffffff;
+  --brand-soft: #e1f1ec;
+  --warn: #9a5705;
+  --warn-soft: #fbf0dc;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --mark: #fde68a;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #0b0c0b;
+  --surface: #131513;
+  --sunken: #1a1c1a;
+  --line: #252825;
+  --line-strong: #363a36;
+  --ink: #ecede7;
+  --ink-2: #c3c5bd;
+  --muted: #8f928a;
+  --brand: #3fcca8;
+  --brand-ink: #04120d;
+  --brand-soft: #0f2a21;
+  --warn: #f2b458;
+  --warn-soft: #2b200e;
+  --danger: #f5877d;
+  --danger-soft: #2e1513;
+  --mark: #6b5a14;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-mark: var(--mark);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-serif), ui-serif, Georgia, serif;
+}
+
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--brand-soft);
+  }
+  /* Figures line up in columns everywhere (tables, stat tiles, answers). */
+  body {
+    font-variant-numeric: tabular-nums;
+  }
+  h1,
+  h2 {
+    text-wrap: balance;
+  }
+  mark {
+    background: var(--mark);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.45);
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+  }
+  .card {
+    @apply rounded-xl border border-line bg-surface;
+  }
+  .btn {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  /* Used as "btn btn-primary": Tailwind v4 cannot @apply one component class inside another. */
+  .btn-primary {
+    @apply bg-ink text-bg hover:bg-ink-2;
+  }
+  .btn-ghost {
+    @apply border border-line bg-surface text-ink hover:border-line-strong hover:bg-sunken;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-left text-sm text-ink-2 transition-colors hover:border-line-strong hover:text-ink;
+  }
+  .eyebrow {
+    @apply font-mono text-xs tracking-wider text-muted uppercase;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

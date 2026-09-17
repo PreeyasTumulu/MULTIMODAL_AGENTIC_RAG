@@ -1,0 +1,27 @@
+# Keep the build context small and out of the image entirely.
+.venv/
+__pycache__/
+*.py[cod]
+.git/
+.github/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Reproducible from scripts + manifest, never baked into an image (see .gitignore).
+/data/
+notebooks/data/
+*.pdf
+*.parquet
+
+# Large / not needed at runtime. frontend/ has its own image and build context.
+frontend/
+notebooks/
+results/
+docs/
+alembic/versions/__pycache__/
+
+# Secrets — passed in via env_file/environment at run time, never COPYed.
+.env
+.env.local
+*.pem

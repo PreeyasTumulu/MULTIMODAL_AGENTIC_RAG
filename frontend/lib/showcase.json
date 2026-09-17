@@ -1,0 +1,333 @@
+{
+ "figure": {
+  "question": "What was ICICI Bank's net profit in FY2024?",
+  "answer": "ICICI Bank's net profit in FY2024 was ₹ 442,563,735 (as printed; the cited page does not state the unit)",
+  "abstained": false,
+  "abstain_reason": null,
+  "values": [
+   "442,563,735"
+  ],
+  "citations": [
+   {
+    "document_id": "ICICIBANK-annual_report-FY2024-da71b80e",
+    "ticker": "ICICIBANK",
+    "fiscal_year": 2024,
+    "pages": [
+     271
+    ],
+    "element_ids": [
+     "ICICIBANK-annual_report-FY2024-da71b80e:p0271:e0000"
+    ],
+    "type": "table",
+    "snippet": "CONSOLIDATED FINANCIAL STATEMENTS OF ICICI BANK LIMITED CONSOLIDATED BALANCE SHEET\n\n | Schedule | Year ended\n31.03.2024 | Year ended\n31.03.2023\nNet profit for the year before minority interest |  | 460,805,127 | 354,613,146\nLess: Minority interest |  | 18,241,392 | 14,246,738\nNet profit for the year"
+   }
+  ],
+  "computations": [],
+  "route": {
+   "intent": "value_lookup",
+   "tickers": [
+    "ICICIBANK"
+   ],
+   "fiscal_years": [
+    2024
+   ],
+   "concept": "Net Income",
+   "start": "2024-03-31",
+   "end": "2024-03-31"
+  },
+  "trace": [
+   {
+    "step": "route",
+    "ms": 2010.7,
+    "detail": {
+     "cached": true,
+     "intent": "value_lookup",
+     "tickers": [
+      "ICICIBANK"
+     ],
+     "fiscal_years": [
+      "FY2024"
+     ],
+     "concept": "Net Income",
+     "start": "2024-03-31",
+     "end": "2024-03-31"
+    }
+   },
+   {
+    "step": "retrieve",
+    "ms": 111.1,
+    "detail": {
+     "k": 10,
+     "ticker": "ICICIBANK",
+     "fiscal_year": 2024,
+     "pages": [
+      158,
+      144,
+      158,
+      158,
+      272,
+      271,
+      326,
+      327,
+      271,
+      221
+     ]
+    }
+   },
+   {
+    "step": "extract",
+    "ms": 3541.6,
+    "detail": {
+     "cached": true,
+     "answer": "ICICI Bank's net profit in FY2024 was ₹ 442,563,735",
+     "value": "442,563,735",
+     "unit": "million",
+     "sources": [
+      6,
+      9
+     ]
+    }
+   }
+  ],
+  "llm_calls": 2,
+  "tokens": 2962,
+  "ms": 115.8
+ },
+ "growth": {
+  "question": "By what percentage did Sun Pharma's net profit change from FY2024 to FY2025?",
+  "answer": "Sun Pharmaceutical Industries's net profit changed +13.3% from FY2024 (96,484.4) to FY2025 (109,290.4 million).",
+  "abstained": false,
+  "abstain_reason": null,
+  "values": [
+   "96,484.4",
+   "109,290.4"
+  ],
+  "citations": [
+   {
+    "document_id": "SUNPHARMA-annual_report-FY2024-cca3bdde",
+    "ticker": "SUNPHARMA",
+    "fiscal_year": 2024,
+    "pages": [
+     38
+    ],
+    "element_ids": [
+     "SUNPHARMA-annual_report-FY2024-cca3bdde:p0038:e0000"
+    ],
+    "type": "table",
+    "snippet": " | Standalone |  | Consolidated | \n | Year ended\nMarch 31, 2024 | Year ended\nMarch 31, 2023 | Year ended\nMarch 31, 2024 | Year ended\nMarch 31, 2023\nRevenue from operations | 202,751.7 | 208,121.4 | 484,968.5 | 438,856.8\nProfit before exceptional item and tax | 36,686.7 | 46,788.4 | 115,822.1 | 95,79"
+   },
+   {
+    "document_id": "SUNPHARMA-annual_report-FY2025-7cf1d4f4",
+    "ticker": "SUNPHARMA",
+    "fiscal_year": 2025,
+    "pages": [
+     284
+    ],
+    "element_ids": [
+     "SUNPHARMA-annual_report-FY2025-7cf1d4f4:p0284:e0000"
+    ],
+    "type": "table",
+    "snippet": " | Year ended\nMarch 31, 2025 |  | Year ended\nMarch 31, 2024\nProfit for the year (` in Million) - used as numerator for calculating earnings per share | 109,290.4 | 95,763.8 | \nWeighted average number of shares used in computing basic and diluted earnings per share | 2,399,334,970 | 2,399,334,970 | \n"
+   }
+  ],
+  "computations": [
+   {
+    "expression": "(109290.4 - 96484.4) / 96484.4 * 100",
+    "result": "13.27",
+    "unit": "percent"
+   }
+  ],
+  "route": {
+   "intent": "growth",
+   "tickers": [
+    "SUNPHARMA"
+   ],
+   "fiscal_years": [
+    2024,
+    2025
+   ],
+   "concept": "Net Income",
+   "start": null,
+   "end": null
+  },
+  "trace": [
+   {
+    "step": "route",
+    "ms": 1718.3,
+    "detail": {
+     "cached": true,
+     "intent": "growth",
+     "tickers": [
+      "SUNPHARMA"
+     ],
+     "fiscal_years": [
+      "FY2024",
+      "FY2025"
+     ],
+     "concept": "Net Income",
+     "start": null,
+     "end": null
+    }
+   },
+   {
+    "step": "retrieve",
+    "ms": 110.7,
+    "detail": {
+     "k": 10,
+     "ticker": "SUNPHARMA",
+     "fiscal_year": 2024,
+     "pages": [
+      260,
+      66,
+      176,
+      6,
+      38,
+      6,
+      243,
+      249,
+      172,
+      6
+     ]
+    }
+   },
+   {
+    "step": "extract",
+    "ms": 1819.4,
+    "detail": {
+     "cached": true,
+     "answer": "96,484.4",
+     "unit": "J million",
+     "sources": [
+      4,
+      5
+     ]
+    }
+   },
+   {
+    "step": "retrieve",
+    "ms": 96.4,
+    "detail": {
+     "k": 10,
+     "ticker": "SUNPHARMA",
+     "fiscal_year": 2025,
+     "pages": [
+      6,
+      259,
+      29,
+      272,
+      6,
+      29,
+      40,
+      204,
+      259,
+      226
+     ]
+    }
+   },
+   {
+    "step": "extract",
+    "ms": 1622.8,
+    "detail": {
+     "cached": true,
+     "answer": "109,290",
+     "unit": "million",
+     "sources": [
+      10
+     ]
+    }
+   },
+   {
+    "step": "verify",
+    "ms": 0.0,
+    "detail": {
+     "failed": "not_grounded"
+    }
+   },
+   {
+    "step": "retrieve",
+    "ms": 101.7,
+    "detail": {
+     "k": 20,
+     "ticker": "SUNPHARMA",
+     "fiscal_year": 2025,
+     "pages": [
+      6,
+      259,
+      29,
+      272,
+      6,
+      29,
+      40,
+      204,
+      259,
+      226,
+      253,
+      284,
+      181,
+      273,
+      284,
+      200,
+      226,
+      6,
+      176,
+      285
+     ]
+    }
+   },
+   {
+    "step": "extract",
+    "ms": 1898.2,
+    "detail": {
+     "cached": true,
+     "answer": "109,290.4 million",
+     "unit": "million",
+     "sources": [
+      12
+     ]
+    }
+   }
+  ],
+  "llm_calls": 4,
+  "tokens": 5893,
+  "ms": 316.1
+ },
+ "declined": {
+  "question": "Should I buy HDFC Bank shares now?",
+  "answer": null,
+  "abstained": true,
+  "abstain_reason": "unsupported_question",
+  "values": [],
+  "citations": [],
+  "computations": [],
+  "route": {
+   "intent": "unsupported",
+   "tickers": [
+    "HDFCBANK"
+   ],
+   "fiscal_years": [],
+   "concept": null,
+   "start": null,
+   "end": null
+  },
+  "trace": [
+   {
+    "step": "route",
+    "ms": 1787.5,
+    "detail": {
+     "cached": true,
+     "intent": "unsupported",
+     "tickers": [
+      "HDFCBANK"
+     ],
+     "fiscal_years": null,
+     "concept": null,
+     "start": null,
+     "end": null
+    }
+   }
+  ],
+  "llm_calls": 1,
+  "tokens": 413,
+  "ms": 1.9
+ }
+}

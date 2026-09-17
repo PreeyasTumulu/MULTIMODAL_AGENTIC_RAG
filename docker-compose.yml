@@ -1,4 +1,3 @@
-# Data plane only. The application runs on the host during development.
 services:
   postgres:
     image: postgres:17-alpine
@@ -26,6 +25,54 @@ services:
       - "6334:6334"   # gRPC
     volumes:
       - qdrantdata:/qdrant/storage
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: agentic_rag_api
+    env_file: .env
+    environment:
+      # Inside the compose network, containers reach each other by service name,
+      # not localhost — .env's values are for the host-native workflow and stay
+      # as they are so nothing else has to change.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      QDRANT_URL: http://qdrant:6333
+      # Local Ollama still runs on the host, not in compose (see analyst.llm /
+      # ADR-002); Docker Desktop exposes it at host.docker.internal. On the AWS
+      # target, set LLM_PROVIDER=groq in .env instead — there is no host Ollama there.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    ports:
+      - "8400:8400"
+    volumes:
+      # /figures reads report PDFs straight off disk (see api.py); data/ is
+      # gitignored and reproducible, so it is mounted, never baked into the image.
+      # Read-write: the LLM cache (data/llm_cache.sqlite, analyst/llm.py) is written on
+      # every uncached question, and SQLite needs the directory for its journal.
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: agentic_rag_frontend
+    environment:
+      # Server-only (lib/api.ts): never exposed to the browser bundle. The
+      # browser only ever talks to this container's own /api/* route handlers.
+      API_URL: http://api:8400
+    ports:
+      # Host 3300: 3000 is taken by other local projects on this machine.
+      - "3300:3000"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:

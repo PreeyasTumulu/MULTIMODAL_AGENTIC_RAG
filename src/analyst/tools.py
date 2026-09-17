@@ -25,6 +25,7 @@ class Company:
     ticker: str
     name: str
     filing_years: tuple[int, ...]  # fiscal years with an indexed annual report
+    sector: str = ""  # display only (the web UI groups by it); the router never sees it
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ def load_corpus() -> dict[str, Company]:
         years: dict[str, list[int]] = defaultdict(list)
         for ticker, fy in s.execute(select(models.Document.ticker, models.Document.fiscal_year)):
             years[ticker].append(fy)
-        return {c.ticker: Company(c.ticker, c.name, tuple(sorted(years[c.ticker])))
+        return {c.ticker: Company(c.ticker, c.name, tuple(sorted(years[c.ticker])), c.sector)
                 for c in s.execute(select(models.Company)).scalars()}
 
 

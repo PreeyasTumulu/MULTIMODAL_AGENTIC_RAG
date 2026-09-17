@@ -7,6 +7,34 @@ Notable changes per development day. Format loosely follows
 
 ## [Unreleased]
 
+### Day 7 — Pramaan: a Next.js web app, and the stack in Docker
+
+**Streamlit is gone; the product is a Next.js 16 web app** ([`frontend/`](../frontend/)),
+named Pramaan (Hindi for *proof*). This reverses the PRD non-goal "a production SPA
+frontend": the project is meant to be shown, and Streamlit did not show it well.
+
+- **Pages:** a product page whose answer cards are real API responses
+  (`frontend/lib/showcase.json`), the Analyst workspace (shareable `?q=` links, recent
+  questions, pending/declined/error states), Coverage (live from `/api/v1/companies`,
+  grouped by sector) and Methodology (pipeline, decisions, measured results, limitations).
+- **Evidence you can open:** each citation opens the stored element
+  (`/api/v1/elements/{id}`) — the structured table with the verified figure highlighted,
+  or the figure with the vision-model disclaimer. The pipeline trace shows the k=20 retry
+  when verification fails.
+- **The API is called only server-side** (Next.js route handlers), so it needs no CORS and
+  its address never reaches the browser.
+- **Docker:** `docker/api.Dockerfile` (uv, bge-small baked in at build) and
+  `frontend/Dockerfile` (standalone build); Compose runs Postgres, Qdrant, API and web app.
+  Verified end to end against the real corpus.
+- **Fixed on the way:** `data/` was mounted read-only, and every *uncached* question then
+  crashed with a 500 — the LLM cache (`data/llm_cache.sqlite`) is written per question.
+- **API:** `Company` gained `sector` (display only; the router prompt is unchanged, so
+  measured results and the answer cache still hold). `Settings.api_url` removed (only
+  Streamlit read it). `streamlit` dependency removed.
+- **Found, not fixed:** llama3.2 routes relative-date price questions badly (see README
+  Limitations), and a value answer can keep a unit the page does not print
+  ("2,714,714.90 million (as printed; the cited page does not state the unit)").
+
 ### Day 6 — from chunks to answers: agent, verifier, API
 
 **The system now answers.** `analyst.agent` routes a question, retrieves with the

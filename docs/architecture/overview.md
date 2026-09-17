@@ -22,7 +22,7 @@ evidence the model cited, and does the arithmetic. Everything below follows from
 
 ```mermaid
 flowchart TB
-    UI["Streamlit ✅"] --> API["FastAPI ✅<br/>/api/v1/ask"]
+    UI["Next.js web app ✅<br/>server-side proxy"] --> API["FastAPI ✅<br/>/api/v1/ask"]
     API --> AG["agent.ask ✅<br/>plain Python"]
     AG --> R{"Route ✅<br/>LLM, JSON — checked against Postgres"}
 
@@ -63,9 +63,9 @@ instead), and any read of `facts` by the agent (it is the evaluation oracle).
 | 5 | Retrieval | Dense + query expansion, metadata filters | ✅ [ADR-007](../adr/0007-retrieval-strategy.md) |
 | 6 | Answering | Route, extract, verify, compute, refuse | ✅ [ADR-009](../adr/0009-answer-generation.md) |
 | 7 | Figures | Vision triage by kind, blank images skipped, described figures indexed | ✅ 16 of 418 indexed · [ADR-010](../adr/0010-figures.md) |
-| 8 | Serving | FastAPI + Streamlit | ✅ verified in a browser |
+| 8 | Serving | FastAPI + Next.js web app (`frontend/`, replaced Streamlit on Day 7) | ✅ verified in a browser, dev and Docker |
 | 9 | Evaluation | Retrieval ledger + answer ledger, no LLM judge | ✅ |
-| 10 | Deployment | Docker, CI, AWS | 🔜 |
+| 10 | Deployment | Docker Compose (API + web app) ✅ · CI, AWS | 🔜 |
 
 ---
 
@@ -109,7 +109,7 @@ than code. Groq's free models allow 8K tokens a minute, which caps one request a
 ```mermaid
 flowchart LR
     subgraph DEV["Development — Windows + Docker Desktop"]
-        APP["Python app on host<br/>API :8400 · UI :8502"]
+        APP["API :8400 · web app :3300<br/>on the host, or in compose"]
         PGD[("postgres:17-alpine<br/>host :5433")]
         QDD[("qdrant 1.12.4<br/>host :6333")]
         OLL["Ollama<br/>host :11434"]
@@ -117,9 +117,12 @@ flowchart LR
     end
 ```
 
-The data plane runs in Docker; the application runs on the host during
-development. That keeps the edit-run loop fast and avoids rebuilding an image on
-every change.
+The data plane runs in Docker; during development the API and the web app run on the
+host, which keeps the edit-run loop fast. `docker compose up -d` also builds and runs
+both as containers (`docker/api.Dockerfile`, `frontend/Dockerfile`) — the shape a
+deployment takes. The web app reaches the API only server-side, at `API_URL`
+(`http://api:8400` inside compose), so the API needs no CORS. Ollama stays on the host
+(`host.docker.internal:11434`); a server without it answers with Groq instead.
 
 ---
 

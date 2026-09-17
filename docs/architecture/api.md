@@ -283,7 +283,7 @@ tiers this runs on.
 | Rate limiting | Per-key token bucket, sized under the LLM provider's own daily quota |
 | Request budget | Hard timeout; partial work is discarded rather than returned |
 | Validation | Pydantic v2 models; FastAPI generates OpenAPI from them |
-| CORS | Streamlit origin only |
+| CORS | None needed: the web app calls the API from its server-side route handlers, so browsers never make a cross-origin request |
 | Logging | One structured event per stage, correlated by `request_id` |
 | Prompt injection | Retrieved text is passed as data, never concatenated into the instruction section of a prompt |
 | Versioning | Path-versioned `/api/v1`; breaking changes get `/v2` |

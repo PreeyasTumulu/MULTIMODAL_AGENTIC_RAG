@@ -66,7 +66,7 @@ Named explicitly so scope creep is a decision, not an accident.
 | Real-time / intraday data | Daily bars are sufficient; intraday adds cost and no learning |
 | Every listed Indian company | 12 companies across 4 sectors is enough to exercise routing |
 | Fine-tuning any model | Retrieval quality is the bottleneck, not model weights |
-| A production SPA frontend | Streamlit is adequate; Next.js is already on the author's CV |
+| ~~A production SPA frontend~~ | **Reversed 2026-09-17:** a Next.js web app replaced Streamlit, so the project can be shown as a product |
 | Multi-user auth, billing, tenancy | No users to isolate |
 | OCR | All corpus PDFs carry a real text layer — [ADR-004](../adr/0004-pdf-parser.md) |
 
@@ -83,7 +83,7 @@ Named explicitly so scope creep is a decision, not an accident.
 - Document, Table, SQL, Vision and Calculator agents behind a router
 - Auto-generated evaluation benchmark with retrieval and generation metrics
 - Groundedness verification and explicit abstention
-- FastAPI + Streamlit, Docker, CI, AWS deployment
+- FastAPI + a web front end (Streamlit, then Next.js from Day 7), Docker, CI, AWS deployment
 
 ### Deferred (decided, not forgotten)
 

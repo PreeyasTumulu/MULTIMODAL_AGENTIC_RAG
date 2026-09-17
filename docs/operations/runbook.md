@@ -252,8 +252,8 @@ inlining the change in a shell command.
 | **5433** | Project Postgres | |
 | **6333** | Qdrant REST + dashboard at `/dashboard` | |
 | 6334 | Qdrant gRPC | |
-| 8000 | FastAPI | Day 6 |
-| 8501 | Streamlit | Day 6 |
+| **8400** | FastAPI | Not 8000 — another local project binds it |
+| **3300** | Next.js web app | Dev server and compose; 3000 is taken locally |
 | 11434 | Ollama | Native Windows install |
 
 ---

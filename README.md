@@ -20,8 +20,9 @@ arithmetic. Anything that fails the check is refused.
 | "How has Reliance Industries traded over the last year?" | Fixed read-only price query → change computed in Python |
 | "Should I buy HDFC Bank shares?" · "TCS's net profit in FY2025?" | Refused: advice / no TCS filing is indexed |
 
-> **Status: Day 6.** Retrieval, answering, figure triage and the API + UI are built.
-> Deployment is not. This README claims only what is built and measured — see
+> **Status: Day 7.** Retrieval, answering, figure triage, the API and the **Pramaan** web
+> app ([`frontend/`](frontend/)) are built and run under Docker Compose. CI and cloud
+> deployment are not. This README claims only what is built and measured — see
 > [Results](#results) and [Limitations](#limitations).
 
 ---
@@ -76,11 +77,18 @@ uv run alembic upgrade head
 uv run jupyter lab            # then run notebooks/01 .. 16 in order
 ```
 
-Serve it:
+Serve it — everything in containers, web app on http://localhost:3300:
+
+```bash
+docker compose up -d --build
+```
+
+Or on the host, for development:
 
 ```bash
 uv run uvicorn analyst.api:app --port 8400
-uv run streamlit run src/analyst/ui.py
+npm --prefix frontend install
+npm --prefix frontend run dev -- -p 3300
 ```
 
 To answer with Groq instead, set `LLM_PROVIDER=groq`, `LLM_MODEL=openai/gpt-oss-120b` and
@@ -104,7 +112,7 @@ uv run mypy            # strict, over src/ and tests/
 ## Architecture — as built
 
 ```
- Streamlit --> FastAPI /api/v1/ask --> agent.ask()   (plain Python)
+ Next.js web app --(server-side)--> FastAPI /api/v1/ask --> agent.ask()   (plain Python)
                                            |
    route (LLM, JSON) --- checked against Postgres: company, filing years, concept
      |  price --> fixed READ ONLY query --> change computed in Python
@@ -173,6 +181,11 @@ questions. See [ADR-009](docs/adr/0009-answer-generation.md) for the full breakd
   vision model, not quoted from the report, and shown a blank image that model invented a
   revenue chart with numbers. Blank images are now skipped, and a number found only in a
   description can never verify an answer, but the descriptions themselves are still unreliable.
+- **Price questions are not benchmarked, and the local 3B model routes relative dates
+  badly.** Asked about "the last year" (on 2026-09-17), llama3.2 picked FY2024 windows; an
+  explicit-year price question was misrouted as growth and answered from an unrelated
+  table. A price answer prints the dates it used, so a wrong window is visible; a
+  misrouted question is not. The web app's demo questions leave prices out for this reason.
 - Financial data comes from Yahoo Finance, a *normalisation* of the filed statements. The
   benchmark generator discards facts it cannot locate in the source document, so
   disagreements reduce coverage rather than corrupt the metrics.
@@ -190,11 +203,16 @@ questions. See [ADR-009](docs/adr/0009-answer-generation.md) for the full breakd
 | 3 | Chunking, embeddings, Qdrant, auto-generated benchmark, baseline metrics | done |
 | 4 | Embedding sweep, hybrid retrieval, query expansion, reranking — measured | done |
 | 5 | Contextual chunk prefixes: R@5 0.068 → 0.318 | done |
-| 6 | Agent + verifier, answer evaluation, figure triage, FastAPI + Streamlit | done — Groq run pending |
-| 7 | Docker, CI, AWS deployment | not started |
+| 6 | Agent + verifier, answer evaluation (llama3.2 + Groq), figure triage, FastAPI + Streamlit | done |
+| 7 | Next.js web app (replaces Streamlit), Docker images + Compose | done — verified in a browser |
+| 8 | CI, AWS deployment | not started |
+
+The web app is a thin client of the same API contract. It calls the API only from its
+server-side route handlers, so the browser never sees the API's address and the API needs
+no CORS layer. See [`frontend/README.md`](frontend/README.md).
 
 Deferred by decision, not oversight: semantic caching, full observability stack,
-Next.js frontend, performance tuning.
+performance tuning.
 
 ---
 

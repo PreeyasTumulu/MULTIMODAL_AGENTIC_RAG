@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"
     llm_model: str = "llama3.2"
 
-    # --- serving. Not 8000: another local project already binds it on this machine.
-    api_url: str = "http://localhost:8400"
-
     # --- paths / misc
     data_dir: Path = Path("data")
     log_level: str = "INFO"
