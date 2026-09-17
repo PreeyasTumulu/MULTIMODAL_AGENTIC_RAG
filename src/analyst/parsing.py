@@ -190,6 +190,15 @@ def extract_elements(
         doc.close()
 
 
+def pdf_info(pdf_path: Path) -> tuple[int, bool]:
+    """(pages, password-protected). Raises if the file cannot be opened at all."""
+    doc = pymupdf.open(pdf_path)
+    try:
+        return int(doc.page_count), bool(doc.needs_pass)
+    finally:
+        doc.close()
+
+
 def page_count(pdf_path: Path) -> int:
     doc = pymupdf.open(pdf_path)
     try:

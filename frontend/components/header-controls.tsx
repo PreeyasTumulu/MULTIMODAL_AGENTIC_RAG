@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { Lock, Moon, Sun } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useState } from "react";
@@ -11,18 +11,19 @@ export function NavLinks() {
   const path = usePathname();
   return (
     <nav aria-label="Main" className="flex items-center gap-1">
-      {nav.map(({ href, label }) => {
+      {nav.map(({ href, label, locked }) => {
         const active = path.startsWith(href);
         return (
           <Link
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
-            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
               active ? "bg-sunken text-ink" : "text-muted hover:text-ink"
             }`}
           >
             {label}
+            {locked && <Lock className="size-3" aria-label="private" />}
           </Link>
         );
       })}

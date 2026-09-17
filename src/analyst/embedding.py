@@ -54,7 +54,7 @@ class Embedder:
         return self.spec.dim
 
     def embed_documents(
-        self, texts: Iterable[str], batch_size: int = 64, parallel: int = 4
+        self, texts: Iterable[str], batch_size: int = 64, parallel: int | None = 4
     ) -> Iterator[np.ndarray]:
         """`parallel` is process-level data parallelism, and it is what matters.
 
@@ -68,6 +68,9 @@ class Embedder:
         Defaulted to 4 rather than 8: each worker loads its own copy of the model,
         and a run at parallel=8 died partway through a 9,982-chunk index on a
         machine with ~2 GB free RAM. Slightly slower and it finishes.
+
+        `None` runs in-process: what the API's upload job uses, since a web server
+        should not fork model-sized worker processes.
         """
         yield from self._model.embed(texts, batch_size=batch_size, parallel=parallel)
 

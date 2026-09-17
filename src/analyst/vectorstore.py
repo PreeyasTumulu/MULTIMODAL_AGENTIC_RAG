@@ -43,8 +43,8 @@ class Hit:
     chunk_id: str
     element_ids: list[str]
     document_id: str
-    ticker: str
-    fiscal_year: int
+    ticker: str | None  # None for an uploaded document
+    fiscal_year: int | None
     pages: list[int]
     type: str
     text: str
@@ -70,8 +70,8 @@ def _to_hit(point: models.ScoredPoint) -> Hit:
         chunk_id=str(p.get("chunk_id", "")),
         element_ids=list(p.get("element_ids") or []),
         document_id=str(p.get("document_id", "")),
-        ticker=str(p.get("ticker", "")),
-        fiscal_year=int(p.get("fiscal_year") or 0),
+        ticker=str(p["ticker"]) if p.get("ticker") else None,
+        fiscal_year=int(p["fiscal_year"]) if p.get("fiscal_year") else None,
         pages=list(p.get("pages") or []),
         type=str(p.get("type", "")),
         text=str(p.get("text", "")),
@@ -79,16 +79,13 @@ def _to_hit(point: models.ScoredPoint) -> Hit:
     )
 
 
-def _filter(ticker: str | None, fiscal_year: int | None) -> models.Filter | None:
-    conditions: list[models.Condition] = []
-    if ticker:
-        conditions.append(
-            models.FieldCondition(key="ticker", match=models.MatchValue(value=ticker))
-        )
-    if fiscal_year:
-        conditions.append(
-            models.FieldCondition(key="fiscal_year", match=models.MatchValue(value=fiscal_year))
-        )
+def _filter(ticker: str | None, fiscal_year: int | None,
+            document_id: str | None = None) -> models.Filter | None:
+    wanted = {"ticker": ticker, "fiscal_year": fiscal_year, "document_id": document_id}
+    conditions: list[models.Condition] = [
+        models.FieldCondition(key=k, match=models.MatchValue(value=v))
+        for k, v in wanted.items() if v
+    ]
     return models.Filter(must=conditions) if conditions else None
 
 
@@ -132,6 +129,17 @@ class VectorStore(_Base):
         )
         self._index_payload()
 
+    def ensure(self) -> None:
+        """Create only when missing - uploads add to a collection, they never rebuild it."""
+        if not self.exists():
+            self.recreate()
+
+    def delete_document(self, document_id: str) -> None:
+        match = models.FieldCondition(key="document_id",
+                                      match=models.MatchValue(value=document_id))
+        self.client.delete(self.collection, points_selector=models.FilterSelector(
+            filter=models.Filter(must=[match])))
+
     def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[np.ndarray]) -> None:
         self.client.upsert(
             collection_name=self.collection,
@@ -147,12 +155,13 @@ class VectorStore(_Base):
         limit: int = 10,
         ticker: str | None = None,
         fiscal_year: int | None = None,
+        document_id: str | None = None,
     ) -> list[Hit]:
         result = self.client.query_points(
             collection_name=self.collection,
             query=vector.tolist(),
             limit=limit,
-            query_filter=_filter(ticker, fiscal_year),
+            query_filter=_filter(ticker, fiscal_year, document_id),
             with_payload=True,
         )
         return [_to_hit(p) for p in result.points]

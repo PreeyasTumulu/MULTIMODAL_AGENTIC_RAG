@@ -25,4 +25,6 @@ export const companyQuestion: Record<string, string> = {
   SUNPHARMA: "What was Sun Pharmaceutical Industries's net profit in FY2025?",
 };
 
-export const askHref =(question: string) => `/analyst?q=${encodeURIComponent(question)}`;
+// `doc` scopes the question to one uploaded PDF (private: only works signed in).
+export const askHref = (question: string, doc?: string | null) =>
+  `/analyst?q=${encodeURIComponent(question)}${doc ? `&doc=${encodeURIComponent(doc)}` : ""}`;

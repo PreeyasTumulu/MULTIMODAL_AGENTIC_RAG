@@ -26,7 +26,9 @@ const INTENT: Record<string, string> = {
 const TYPE_ICON = { table: Table2, figure: ImageIcon } as const;
 
 // One answer, laid out as proof: verdict, answer, the arithmetic, then the pages behind it.
-export function AnswerCard({ a, traceOpen = false }: { a: Answer; traceOpen?: boolean }) {
+type Props = { a: Answer; traceOpen?: boolean; documentTitle?: string };
+
+export function AnswerCard({ a, traceOpen = false, documentTitle }: Props) {
   const [source, setSource] = useState<string | null>(null);
   const r = a.route;
   const decline = a.abstain_reason ? declineReasons[a.abstain_reason] : undefined;
@@ -47,10 +49,14 @@ export function AnswerCard({ a, traceOpen = false }: { a: Answer; traceOpen?: bo
             <verdict.icon className="size-3.5" />
             {verdict.text}
           </span>
-          {r && (
+          {r ? (
             <span className="font-mono text-muted">
               {[INTENT[r.intent] ?? r.intent, ...r.tickers, ...(r.fiscal_years ?? []).map((y) => `FY${y}`)].join(" · ")}
             </span>
+          ) : (
+            documentTitle && (
+              <span className="min-w-0 truncate font-mono text-muted">Document · {documentTitle}</span>
+            )
           )}
           <span className="w-full font-mono text-muted sm:ml-auto sm:w-auto">
             {plural(a.llm_calls, "LLM call")} · {plural(a.tokens, "token")} · {seconds(a.ms)}
@@ -91,7 +97,13 @@ export function AnswerCard({ a, traceOpen = false }: { a: Answer; traceOpen?: bo
           <h3 className="eyebrow">Evidence · {a.citations.length}</h3>
           <ul className="mt-3 grid gap-3">
             {a.citations.map((c, i) => (
-              <Evidence key={i} c={c} values={a.values} onOpen={() => setSource(c.element_ids[0])} />
+              <Evidence
+                key={i}
+                c={c}
+                values={a.values}
+                documentTitle={documentTitle}
+                onOpen={() => setSource(c.element_ids[0])}
+              />
             ))}
           </ul>
         </section>
@@ -114,8 +126,14 @@ export function AnswerCard({ a, traceOpen = false }: { a: Answer; traceOpen?: bo
   );
 }
 
-function Evidence({ c, values, onOpen }: { c: Citation; values: string[]; onOpen: () => void }) {
+type EvidenceProps = { c: Citation; values: string[]; documentTitle?: string; onOpen: () => void };
+
+function Evidence({ c, values, documentTitle, onOpen }: EvidenceProps) {
   const Icon = TYPE_ICON[c.type as keyof typeof TYPE_ICON] ?? FileText;
+  // A filing is named by company and year; an upload has neither, so by its title.
+  const source = c.ticker
+    ? `${c.ticker} · FY${c.fiscal_year} annual report`
+    : (documentTitle ?? "Uploaded document");
   return (
     <li className="card p-4">
       <div className="flex items-start gap-3">
@@ -123,9 +141,7 @@ function Evidence({ c, values, onOpen }: { c: Citation; values: string[]; onOpen
           <Icon className="size-4 text-muted" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1 leading-tight">
-          <p className="text-sm font-medium">
-            {c.ticker} · FY{c.fiscal_year} annual report
-          </p>
+          <p className="truncate text-sm font-medium">{source}</p>
           <p className="mt-0.5 text-xs text-muted capitalize">
             Page {c.pages.join(", ")} · {c.type}
           </p>
@@ -141,7 +157,7 @@ function Evidence({ c, values, onOpen }: { c: Citation; values: string[]; onOpen
         // eslint-disable-next-line @next/next/no-img-element -- bytes come from the API
         <img
           src={`/api/figures/${encodeURIComponent(c.element_ids[0])}`}
-          alt={`Figure cited from ${c.ticker} FY${c.fiscal_year}, page ${c.pages[0]}`}
+          alt={`Figure cited from ${source}, page ${c.pages[0]}`}
           className="mt-3 max-h-64 rounded-lg border border-line"
         />
       )}

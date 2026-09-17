@@ -45,8 +45,12 @@ def load_corpus() -> dict[str, Company]:
     with session_scope() as s:
         s.execute(text("SET TRANSACTION READ ONLY"))
         years: dict[str, list[int]] = defaultdict(list)
-        for ticker, fy in s.execute(select(models.Document.ticker, models.Document.fiscal_year)):
-            years[ticker].append(fy)
+        # Only the measured corpus: an upload has no company, and must never widen what
+        # the router believes the filings cover.
+        for ticker, fy in s.execute(select(models.Document.ticker, models.Document.fiscal_year)
+                                    .where(models.Document.source == "corpus")):
+            if ticker and fy:
+                years[ticker].append(fy)
         return {c.ticker: Company(c.ticker, c.name, tuple(sorted(years[c.ticker])), c.sector)
                 for c in s.execute(select(models.Company)).scalars()}
 

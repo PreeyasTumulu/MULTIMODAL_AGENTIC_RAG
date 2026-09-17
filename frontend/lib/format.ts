@@ -2,7 +2,7 @@
 export const declineReasons: Record<string, { title: string; body: string }> = {
   insufficient_evidence: {
     title: "The retrieved pages don't contain the answer",
-    body: "Nothing in the indexed report printed a figure for this. Try naming the statement line, e.g. \"net profit\" or \"total assets\".",
+    body: "Nothing retrieved states what was asked. Try the wording the document itself uses, e.g. \"net profit\" rather than \"earnings\".",
   },
   not_grounded: {
     title: "The figure couldn't be verified on its page",

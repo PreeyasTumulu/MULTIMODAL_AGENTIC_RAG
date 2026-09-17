@@ -202,3 +202,16 @@ def filings(
                             limit=limit, ticker=ticker, fiscal_year=fiscal_year)
 
     return search
+
+
+def uploaded(embedder: Embedder, store: VectorStore) -> Callable[[str, str, int], list[Hit]]:
+    """Document mode: plain dense search inside ONE uploaded PDF.
+
+    No query expansion - `expand` rewrites questions into an Indian annual
+    report's vocabulary, which an arbitrary uploaded document does not share.
+    """
+
+    def search(text: str, document_id: str, limit: int) -> list[Hit]:
+        return store.search(embedder.embed_query(text), limit=limit, document_id=document_id)
+
+    return search

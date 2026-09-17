@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"
     llm_model: str = "llama3.2"
 
+    # --- private uploads. Unset (or empty) means the upload routes are switched off:
+    # a public deploy must opt in, it can never be open by accident.
+    admin_api_key: SecretStr | None = None
+
     # --- paths / misc
     data_dir: Path = Path("data")
     log_level: str = "INFO"

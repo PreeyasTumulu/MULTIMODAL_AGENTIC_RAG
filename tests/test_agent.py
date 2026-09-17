@@ -4,13 +4,13 @@ Each test pins one ownership rule: the LLM points, Python verifies and computes,
 and anything that cannot be verified is refused rather than shown.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from decimal import Decimal
 
 import pytest
 
-from analyst.agent import Route, Tools, ask
+from analyst.agent import Route, Tools, ask, ask_document
 from analyst.llm import Reply
 from analyst.tools import Company, PriceSummary
 from analyst.vectorstore import Hit
@@ -143,3 +143,54 @@ def test_a_price_change_needs_no_extraction_call() -> None:
     a = ask("How has Sun Pharmaceutical Industries traded?",
             Script({"intent": "price", "tickers": []}), tools(prices=p))
     assert ([c.result for c in a.computations], a.llm_calls) == (["12.50"], 1)
+
+
+# --- document mode: one uploaded PDF, no router, the same verifier
+
+
+def page(text: str, eid: str) -> Hit:
+    return Hit(chunk_id=f"{eid}#0", element_ids=[eid], document_id="upload-x", ticker=None,
+               fiscal_year=None, pages=[3], type="table", text=text, score=0.9)
+
+
+def within(*hits: Hit) -> Callable[[str, str, int], list[Hit]]:
+    return lambda text, document_id, limit: list(hits)
+
+
+class Recorder(Script):
+    """A Script that also keeps what the model was shown."""
+
+    def __init__(self, *replies: Mapping[str, object]) -> None:
+        super().__init__(*replies)
+        self.prompts: list[str] = []
+
+    def complete(self, system: str, user: str) -> Reply:
+        self.prompts.append(user)
+        return super().complete(system, user)
+
+
+def test_document_mode_verifies_and_cites_every_figure_it_states() -> None:
+    llm = Recorder({"answer": "Revenue was 12,450 and costs were 8,120.", "value": "12,450",
+                    "sources": [1, 2]})
+    a = ask_document("What were revenue and costs?", "upload-x", llm,
+                     within(page("Revenue | 12,450", "U1"), page("Costs | 8,120", "U2")))
+    assert (a.abstained, a.values, a.llm_calls) == (False, ["12,450", "8,120"], 1)
+    assert [c.element_ids[0] for c in a.citations] == ["U1", "U2"]
+    # No router call, and the evidence header names no company or year.
+    assert llm.prompts[0].count("[1] page 3 (table)") == 1
+
+
+def test_document_mode_refuses_a_figure_the_document_does_not_print() -> None:
+    wrong = {"answer": "Revenue was 99,999.", "value": "99,999", "sources": [1]}
+    a = ask_document("What was revenue?", "upload-x", Script(wrong, wrong),
+                     within(page("Revenue | 12,450", "U1")))
+    assert (a.abstained, a.abstain_reason, a.llm_calls) == (True, "not_grounded", 2)
+
+
+def test_document_mode_answers_prose_citing_what_it_used() -> None:
+    llm = Script({"answer": "The lease runs for three years.", "value": None, "sources": [2]})
+    lease = page("The lease term is three years.", "U2")
+    a = ask_document("How long is the lease?", "upload-x", llm,
+                     within(page("Rent schedule", "U1"), lease))
+    assert (a.abstained, a.values, [c.element_ids[0] for c in a.citations]) == (False, [], ["U2"])
+    assert (a.citations[0].ticker, a.trace[0].detail["document_id"]) == (None, "upload-x")

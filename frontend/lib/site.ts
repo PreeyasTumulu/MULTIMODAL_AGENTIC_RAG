@@ -12,6 +12,7 @@ export const site = {
 
 export const nav = [
   { href: "/analyst", label: "Analyst" },
+  { href: "/documents", label: "Documents", locked: true }, // private: behind sign-in
   { href: "/coverage", label: "Coverage" },
   { href: "/methodology", label: "Methodology" },
 ];

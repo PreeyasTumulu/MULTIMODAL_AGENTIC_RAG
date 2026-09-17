@@ -3,8 +3,8 @@
 
 export type Citation = {
   document_id: string;
-  ticker: string;
-  fiscal_year: number;
+  ticker: string | null; // null when the source is an uploaded document
+  fiscal_year: number | null;
   pages: number[];
   element_ids: string[];
   type: string;
@@ -50,6 +50,19 @@ export type ElementDetail = {
   text: string | null;
   table_json: { header?: string[]; rows?: string[][] } | null;
   figure: { kind: string; description: string; described_by: string } | null;
+};
+
+// src/analyst/uploads.py Upload
+export type Upload = {
+  document_id: string;
+  title: string;
+  status: "queued" | "parsing" | "indexing" | "ready" | "failed";
+  progress: number;
+  pages: number | null;
+  chunks: number | null;
+  size_bytes: number;
+  error: string | null;
+  uploaded_at: string;
 };
 
 export type Health = {

@@ -97,9 +97,9 @@ class DocContext:
     plausible-looking wrong context more often than right context.
     """
 
-    ticker: str
+    ticker: str | None
     company: str
-    fiscal_year: int
+    fiscal_year: int | None
 
     @property
     def prefix(self) -> str:
@@ -119,7 +119,7 @@ class _NoContext(DocContext):
     """The baseline arm: carries the ticker and year a Chunk needs, prints
     nothing. Keeps `chunk_document` free of `if context is None` branches."""
 
-    def __init__(self, ticker: str, fiscal_year: int) -> None:
+    def __init__(self, ticker: str | None, fiscal_year: int | None) -> None:
         super().__init__(ticker=ticker, company="", fiscal_year=fiscal_year)
 
     @property
@@ -127,13 +127,26 @@ class _NoContext(DocContext):
         return ""
 
 
+class TitleContext(DocContext):
+    """An uploaded PDF has no company or fiscal year, so its title is what every chunk
+    states instead - the same reason as above: a bare table should say what it is from."""
+
+    def __init__(self, title: str) -> None:
+        # Capped: the prefix is paid for out of the encoder budget on every chunk.
+        super().__init__(ticker=None, company=title[:120], fiscal_year=None)
+
+    @property
+    def prefix(self) -> str:
+        return self.company
+
+
 class Chunk(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     chunk_id: str
     document_id: str
-    ticker: str
-    fiscal_year: int
+    ticker: str | None
+    fiscal_year: int | None
     element_ids: list[str]
     pages: list[int]
     type: str
@@ -323,8 +336,8 @@ def _flush_text(
 
 def chunk_document(
     elements: Sequence[SourceElement],
-    ticker: str,
-    fiscal_year: int,
+    ticker: str | None,
+    fiscal_year: int | None,
     context: DocContext | None = None,
     strip_furniture: bool = True,
 ) -> list[Chunk]:

@@ -12,6 +12,7 @@ from sqlalchemy import (
     BigInteger,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -76,16 +77,20 @@ class Document(Base):
     `fiscal_year` is the year the Indian FY *ends* (FY2024-25 -> 2025), which is
     exactly `facts.period_end`'s year. That is the join key between the
     unstructured and structured halves of the corpus - no mapping table needed.
+
+    `source` separates the measured corpus from private uploads. An upload has no
+    company or fiscal year (hence nullable), is indexed in its own collection, and
+    is never read by anything that produces a number in results/.
     """
 
     __tablename__ = "documents"
 
     document_id: Mapped[str] = mapped_column(String(80), primary_key=True)
-    ticker: Mapped[str] = mapped_column(
-        ForeignKey("companies.ticker", ondelete="CASCADE"), index=True
+    ticker: Mapped[str | None] = mapped_column(
+        ForeignKey("companies.ticker", ondelete="CASCADE"), index=True, nullable=True
     )
     doc_type: Mapped[str] = mapped_column(String(40), index=True)
-    fiscal_year: Mapped[int] = mapped_column(Integer, index=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(300))
     source_url: Mapped[str] = mapped_column(Text)
     sha256: Mapped[str] = mapped_column(String(64))
@@ -95,7 +100,15 @@ class Document(Base):
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    source: Mapped[str] = mapped_column(String(20), server_default="corpus", index=True)
+    # Upload lifecycle: queued -> parsing -> indexing -> ready | failed. Corpus rows are
+    # built by the notebooks and are simply "ready".
+    status: Mapped[str] = mapped_column(String(20), server_default="ready")
+    progress: Mapped[float] = mapped_column(Float, server_default="0")  # 0-1 within `status`
+    n_chunks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Postgres treats NULLs as distinct, so any number of uploads (ticker NULL) coexist.
     __table_args__ = (
         UniqueConstraint("ticker", "doc_type", "fiscal_year", name="uq_documents_identity"),
     )

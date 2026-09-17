@@ -67,6 +67,9 @@ services:
       # Server-only (lib/api.ts): never exposed to the browser bundle. The
       # browser only ever talks to this container's own /api/* route handlers.
       API_URL: http://api:8400
+      # Signs the session cookie and is sent to the API as X-API-Key (lib/session.ts).
+      # Compose does not read .env files other than its own, so this passes it through.
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
     ports:
       # Host 3300: 3000 is taken by other local projects on this machine.
       - "3300:3000"

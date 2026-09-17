@@ -40,8 +40,11 @@ def load_chunks(
                 .where(FigureDescription.kind.in_(KEEP))).tuples().all())
     out: list[Chunk] = []
     with session_scope() as s:
-        for d in s.execute(select(Document).order_by(Document.ticker)).scalars().all():
-            company = s.get(Company, d.ticker)
+        # The measured corpus only: uploads are indexed by `analyst.uploads`, apart.
+        docs = s.execute(select(Document).where(Document.source == "corpus")
+                         .order_by(Document.ticker)).scalars().all()
+        for d in docs:
+            company = s.get(Company, d.ticker) if d.ticker else None
             rows = s.execute(
                 select(ElementRow.element_id, ElementRow.document_id, ElementRow.page,
                        ElementRow.seq, ElementRow.type, ElementRow.text, ElementRow.table_json)
@@ -54,7 +57,7 @@ def load_chunks(
                    for r in rows]
             ctx = (
                 DocContext(ticker=d.ticker,
-                           company=company.name if company else d.ticker,
+                           company=company.name if company else (d.ticker or ""),
                            fiscal_year=d.fiscal_year)
                 if with_context else None
             )
